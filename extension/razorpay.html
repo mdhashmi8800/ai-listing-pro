@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Payment</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+<script>
+    /* Allowed origins for postMessage */
+    const ALLOWED_ORIGINS = [
+        location.origin,
+        'https://meesho-ai-tool.vercel.app',
+        'https://supplier.meesho.com'
+    ];
+
+    function safePostToParent(data) {
+        /* When opened as chrome-extension:// the parent origin is known */
+        try { window.parent.postMessage(data, '*'); } catch(e) { console.error('postMessage error', e); }
+    }
+
+    /* Tell parent that iframe is ready */
+    safePostToParent({ type: "RZP_IFRAME_READY" });
+
+    window.addEventListener("message", function (event) {
+        /* Validate origin — accept extension origin or known hosts */
+        const fromExtension = event.origin.startsWith('chrome-extension://');
+        const fromAllowed = ALLOWED_ORIGINS.includes(event.origin);
+        if (!fromExtension && !fromAllowed) {
+            console.warn('Rejected postMessage from:', event.origin);
+            return;
+        }
+
+        if (!event.data || event.data.type !== "START_PAYMENT") return;
+
+        const options = {
+            key: event.data.key,
+            amount: event.data.amount,
+            currency: "INR",
+            name: "AI Listing Pro",
+            order_id: event.data.order_id,
+
+            handler: function (response) {
+                safePostToParent({
+                    type: "PAYMENT_SUCCESS",
+                    data: response
+                });
+            },
+
+            modal: {
+                ondismiss: function () {
+                    safePostToParent({ type: "PAYMENT_CANCELLED" });
+                }
+            }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+    });
+</script>
+</body>
+</html>

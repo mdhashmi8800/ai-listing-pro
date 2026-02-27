@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Secure Checkout - AI Listing Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Razorpay Checkout Script -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .loader {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #2563eb;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        h2 {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        p {
+            font-size: 14px;
+            color: #64748b;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="loader" id="loader"></div>
+    <h2 id="status">Secure Checkout</h2>
+    <p id="sub-status">Please wait while we connect to Razorpay...</p>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        window.ORDER_ID = params.get("order_id");
+        window.AMOUNT = params.get("amount");
+        window.USER_ID = params.get("user_id");
+        window.PLAN_TYPE = params.get("plan_type");
+        window.CREDITS = params.get("credits");
+
+        async function startCheckout() {
+            if (!window.ORDER_ID) {
+                document.getElementById('status').textContent = 'Invalid Order';
+                document.getElementById('sub-status').textContent = 'Order ID missing. Please try again.';
+                document.getElementById('loader').style.display = 'none';
+                return;
+            }
+
+            const options = {
+                key: "rzp_test_SJq4OiveTIA30C",
+                amount: window.AMOUNT,
+                currency: "INR",
+                name: "AI Listing Pro",
+                order_id: window.ORDER_ID,
+
+                handler: async function (response) {
+                    document.getElementById('status').textContent = 'Verifying...';
+                    document.getElementById('sub-status').textContent = 'Please do not close this window.';
+
+                    try {
+                        const verifyBody = {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            user_id: window.USER_ID || null,
+                            plan_type: window.PLAN_TYPE || 'starter',
+                            credits_to_add: window.CREDITS || '50',
+                            amount: window.AMOUNT || '0'
+                        };
+
+                        const verifyRes = await fetch("https://zxborvqzttyofyrksznw.supabase.co/functions/v1/verify-payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(verifyBody)
+                        });
+
+                        if (!verifyRes.ok) {
+                            const errData = await verifyRes.json().catch(() => ({}));
+                            throw new Error(errData.error || 'Verification failed');
+                        }
+
+                        document.getElementById('status').textContent = 'Payment Successful!';
+                        document.getElementById('sub-status').textContent = 'Credits have been added. You can close this window.';
+                        document.getElementById('loader').style.display = 'none';
+                        setTimeout(() => window.close(), 3000);
+                    } catch (err) {
+                        document.getElementById('status').textContent = 'Verification Issue';
+                        document.getElementById('sub-status').textContent = 'Payment received. Credits will update shortly.';
+                        document.getElementById('loader').style.display = 'none';
+                        console.error('Verification error:', err);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        window.close();
+                    }
+                }
+            };
+
+            const rzp = new Razorpay(options);
+            rzp.on('payment.failed', function (response) {
+                document.getElementById('status').textContent = 'Payment Failed';
+                document.getElementById('sub-status').textContent = response.error.description || 'Please try again.';
+                document.getElementById('loader').style.display = 'none';
+            });
+            rzp.open();
+        }
+
+        // Start the process
+        startCheckout();
+    </script>
+</body>
+
+</html>
