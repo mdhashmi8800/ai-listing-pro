@@ -48,92 +48,111 @@
             font-size: 14px;
             color: #64748b;
         }
+
+        #loader {
+            display: none;
+        }
+
+        button {
+            margin-top: 16px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
 <body>
     <div class="loader" id="loader"></div>
     <h2 id="status">Secure Checkout</h2>
-    <p id="sub-status">Please wait while we connect to Razorpay...</p>
+    <p id="sub-status">Click below to start payment.</p>
+    <button id="pay-btn" onclick="startPayment()">Pay ₹499</button>
 
     <script>
         const params = new URLSearchParams(window.location.search);
-        window.ORDER_ID = params.get("order_id");
-        window.AMOUNT = params.get("amount");
-        window.USER_ID = params.get("user_id");
-        window.PLAN_TYPE = params.get("plan_type");
-        window.CREDITS = params.get("credits");
+        const selectedAmount = Number(params.get('amount')) || 499;
+        const payBtn = document.getElementById('pay-btn');
+        payBtn.textContent = `Pay ₹${selectedAmount}`;
 
-        async function startCheckout() {
-            if (!window.ORDER_ID) {
-                document.getElementById('status').textContent = 'Invalid Order';
-                document.getElementById('sub-status').textContent = 'Order ID missing. Please try again.';
-                document.getElementById('loader').style.display = 'none';
+        async function startPayment() {
+            const loader = document.getElementById('loader');
+            const status = document.getElementById('status');
+            const subStatus = document.getElementById('sub-status');
+
+            loader.style.display = 'block';
+            status.textContent = 'Creating Order...';
+            subStatus.textContent = 'Please wait while we prepare secure checkout.';
+            payBtn.disabled = true;
+
+            let order;
+
+            try {
+                const response = await fetch('/api/create-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ amount: selectedAmount })
+                });
+
+                order = await response.json();
+
+                if (!response.ok || !order.id) {
+                    throw new Error(order.error || 'Order creation failed');
+                }
+            } catch (error) {
+                loader.style.display = 'none';
+                status.textContent = 'Order Creation Failed';
+                subStatus.textContent = error.message || 'Please try again.';
+                payBtn.disabled = false;
+                alert('Order creation failed');
                 return;
             }
 
             const options = {
-                key: "rzp_test_SJq4OiveTIA30C",
-                amount: window.AMOUNT,
-                currency: "INR",
-                name: "AI Listing Pro",
-                order_id: window.ORDER_ID,
-
-                handler: async function (response) {
-                    document.getElementById('status').textContent = 'Verifying...';
-                    document.getElementById('sub-status').textContent = 'Please do not close this window.';
-
-                    try {
-                        const verifyBody = {
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_signature: response.razorpay_signature,
-                            user_id: window.USER_ID || null,
-                            plan_type: window.PLAN_TYPE || 'starter',
-                            credits_to_add: window.CREDITS || '50',
-                            amount: window.AMOUNT || '0'
-                        };
-
-                        const verifyRes = await fetch("https://zxborvqzttyofyrksznw.supabase.co/functions/v1/verify-payment", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(verifyBody)
-                        });
-
-                        if (!verifyRes.ok) {
-                            const errData = await verifyRes.json().catch(() => ({}));
-                            throw new Error(errData.error || 'Verification failed');
-                        }
-
-                        document.getElementById('status').textContent = 'Payment Successful!';
-                        document.getElementById('sub-status').textContent = 'Credits have been added. You can close this window.';
-                        document.getElementById('loader').style.display = 'none';
-                        setTimeout(() => window.close(), 3000);
-                    } catch (err) {
-                        document.getElementById('status').textContent = 'Verification Issue';
-                        document.getElementById('sub-status').textContent = 'Payment received. Credits will update shortly.';
-                        document.getElementById('loader').style.display = 'none';
-                        console.error('Verification error:', err);
-                    }
+                key: 'rzp_live_xxxxxxxxx',
+                amount: order.amount,
+                currency: 'INR',
+                name: 'AI Listing Pro',
+                description: 'Pro Plan',
+                order_id: order.id,
+                handler: function () {
+                    alert('Payment Successful!');
+                    window.location.href = '/';
                 },
                 modal: {
                     ondismiss: function () {
-                        window.close();
+                        loader.style.display = 'none';
+                        status.textContent = 'Secure Checkout';
+                        subStatus.textContent = 'Payment cancelled. You can try again.';
+                        payBtn.disabled = false;
                     }
                 }
             };
 
             const rzp = new Razorpay(options);
             rzp.on('payment.failed', function (response) {
-                document.getElementById('status').textContent = 'Payment Failed';
-                document.getElementById('sub-status').textContent = response.error.description || 'Please try again.';
-                document.getElementById('loader').style.display = 'none';
+                loader.style.display = 'none';
+                status.textContent = 'Payment Failed';
+                subStatus.textContent = response.error.description || 'Please try again.';
+                payBtn.disabled = false;
             });
+
+            loader.style.display = 'none';
+            status.textContent = 'Opening Razorpay...';
+            subStatus.textContent = 'Complete your payment in the popup.';
             rzp.open();
         }
-
-        // Start the process
-        startCheckout();
     </script>
 </body>
 

@@ -1,7 +1,16 @@
+"use client";
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
 const plans = [
   {
     name: "Starter",
     price: "₹79",
+    amount: 79,
     period: "ONE-TIME",
     description: "50 Credits (+25 Bonus on 1st Buy)",
     features: [
@@ -19,6 +28,7 @@ const plans = [
   {
     name: "Growth",
     price: "₹149",
+    amount: 149,
     period: "ONE-TIME",
     description: "200 Credits — best value for growing sellers.",
     features: [
@@ -36,6 +46,7 @@ const plans = [
   {
     name: "Pro Monthly",
     price: "₹249",
+    amount: 249,
     period: "/mo · AUTO-RENEW",
     description: "500 Credits/month — for power sellers.",
     features: [
@@ -54,6 +65,44 @@ const plans = [
 ];
 
 export default function Pricing() {
+  async function startPayment(amount: number, planName: string) {
+    try {
+      const response = await fetch("/api/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ amount }),
+      });
+
+      const order = await response.json();
+
+      if (!response.ok) {
+        alert("Order creation failed. Please try again.");
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: order.amount,
+        currency: "INR",
+        name: "AI Listing Pro",
+        description: `${planName} Plan`,
+        order_id: order.id,
+        handler: function (response: any) {
+          alert("Payment Successful!");
+          // TODO: verify payment on server & activate plan
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error("Payment error:", err);
+      alert("Something went wrong. Please try again.");
+    }
+  }
+
   return (
     <section id="pricing" className="py-20 md:py-28 bg-surface">
       <div className="max-w-7xl mx-auto px-6">
@@ -123,6 +172,7 @@ export default function Pricing() {
                 ))}
               </ul>
               <button
+                onClick={() => startPayment(plan.amount, plan.name)}
                 className={`w-full py-3 rounded-full font-semibold text-sm transition-all ${
                   plan.highlighted
                     ? "bg-primary text-white hover:bg-primary-dark shadow-lg shadow-primary/25"
