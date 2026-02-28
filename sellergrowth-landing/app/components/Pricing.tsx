@@ -65,20 +65,18 @@ const plans = [
 ];
 
 export default function Pricing() {
-  async function startPayment(amount: number, planName: string) {
+  const startPayment = async (amount: number, plan: string) => {
     try {
-      const response = await fetch("/api/create-order", {
+      const res = await fetch("/api/create-order", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ amount }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, plan }),
       });
 
-      const order = await response.json();
+      const order = await res.json();
 
-      if (!response.ok) {
-        alert("Order creation failed. Please try again.");
+      if (!order.id) {
+        alert("Failed to create order");
         return;
       }
 
@@ -87,21 +85,21 @@ export default function Pricing() {
         amount: order.amount,
         currency: "INR",
         name: "AI Listing Pro",
-        description: `${planName} Plan`,
+        description: plan,
         order_id: order.id,
-        handler: function (response: any) {
+        handler: async function (response: any) {
           alert("Payment Successful!");
-          // TODO: verify payment on server & activate plan
+          window.location.reload();
         },
       };
 
-      const rzp = new window.Razorpay(options);
+      const rzp = new (window as any).Razorpay(options);
       rzp.open();
     } catch (err) {
       console.error("Payment error:", err);
       alert("Something went wrong. Please try again.");
     }
-  }
+  };
 
   return (
     <section id="pricing" className="py-20 md:py-28 bg-surface">
@@ -172,7 +170,19 @@ export default function Pricing() {
                 ))}
               </ul>
               <button
-                onClick={() => startPayment(plan.amount, plan.name)}
+                onClick={() => {
+                  if (plan.name === "Starter") {
+                    startPayment(79, "Starter");
+                    return;
+                  }
+
+                  if (plan.name === "Growth") {
+                    startPayment(149, "Growth");
+                    return;
+                  }
+
+                  startPayment(249, "Pro Monthly");
+                }}
                 className={`w-full py-3 rounded-full font-semibold text-sm transition-all ${
                   plan.highlighted
                     ? "bg-primary text-white hover:bg-primary-dark shadow-lg shadow-primary/25"

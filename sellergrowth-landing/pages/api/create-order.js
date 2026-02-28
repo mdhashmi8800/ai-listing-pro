@@ -15,6 +15,9 @@ export default async function handler(req, res) {
       amount: req.body.amount * 100, // Convert to paise
       currency: "INR",
       receipt: "receipt_" + Date.now(),
+      notes: {
+        plan: req.body.plan,
+      },
     };
 
     const order = await razorpay.orders.create(options);
