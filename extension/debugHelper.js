@@ -61,7 +61,7 @@ const DebugHelper = {
         // ── 3. Check users table ──────────────────────────────
         try {
             const usersResponse = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${stored.user.id}&select=*`,
+                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${stored.user.id}&select=*`,
                 {
                     headers: {
                         'apikey': CONFIG.SUPABASE_ANON_KEY,
@@ -70,39 +70,31 @@ const DebugHelper = {
                 }
             );
 
-            console.log('💾 Users Table Status:', usersResponse.status);
+            console.log('💾 Profiles Table Status:', usersResponse.status);
 
             if (usersResponse.ok) {
                 const users = await usersResponse.json();
                 if (users && users.length > 0) {
                     console.log('✅ User in database:', users[0]);
                 } else {
-                    console.log('❌ User NOT found in users table!');
+                    console.log('❌ User NOT found in profiles table!');
                     console.log('🔧 Attempting to create user...');
                     await this.forceCreateUser(stored.user, token);
                 }
             } else {
-                console.log('❌ Users table check failed:', await usersResponse.text());
+                console.log('❌ Profiles table check failed:', await usersResponse.text());
             }
         } catch (e) {
-            console.error('❌ Users table check error:', e);
+            console.error('❌ Profiles table check error:', e);
         }
 
         console.log('🔍 === END DEBUG INFO ===');
     },
 
-    /** Force-create a user record in the DB (use when user is missing from users table) */
+    /** Force-create a user record in the DB (use when user is missing from profiles table) */
     async forceCreateUser(user, token) {
         try {
-            // Best-effort IP fetch
-            let userIp = null;
-            try {
-                const ipRes = await fetch('https://api.ipify.org?format=json');
-                const ipData = await ipRes.json();
-                userIp = ipData.ip || null;
-            } catch (_) { }
-
-            const createResponse = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/users`, {
+            const createResponse = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/profiles`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -116,8 +108,6 @@ const DebugHelper = {
                     name: user.name || null,
                     credits: CONFIG.DEFAULT_SIGNUP_CREDITS,
                     plan: 'free',
-                    // Only send IP fields when we have a valid value (inet column rejects empty string)
-                    ...(userIp ? { signup_ip: userIp, last_ip: userIp } : {}),
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 })

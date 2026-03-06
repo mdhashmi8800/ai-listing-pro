@@ -3,15 +3,15 @@ export default function Hero() {
     <section className="relative overflow-hidden pt-32 pb-20 md:pt-44 md:pb-32">
       {/* Background gradient blobs */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-br from-primary/20 via-primary-light to-transparent rounded-full blur-3xl opacity-60" />
-        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-gradient-to-tl from-accent/20 to-transparent rounded-full blur-3xl opacity-40" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-to-br from-primary/20 via-purple-900/10 to-transparent rounded-full blur-3xl opacity-60" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-gradient-to-tl from-accent/15 to-transparent rounded-full blur-3xl opacity-40" />
       </div>
 
       <div className="max-w-7xl mx-auto px-6 text-center">
         {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-light text-primary text-sm font-medium mb-8">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-8">
           <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-          AI Listing Pro
+          AI Listing Pro — Chrome Extension
         </div>
 
         {/* Headline */}
@@ -25,9 +25,9 @@ export default function Hero() {
 
         {/* Subtext */}
         <p className="mt-6 text-lg md:text-xl text-muted max-w-2xl mx-auto leading-relaxed">
-          Boost your productivity, optimize product listings, and automate
-          repetitive tasks — all powered by cutting-edge AI built exclusively
-          for Meesho sellers.
+          AI-powered listing optimization, shipping cost detection, product title
+          generation, and seller workflow automation — built exclusively for
+          Meesho sellers.
         </p>
 
         {/* CTA Buttons */}
@@ -36,13 +36,13 @@ export default function Hero() {
             href="#pricing"
             className="px-8 py-3.5 text-base font-semibold text-white bg-primary rounded-full hover:bg-primary-dark transition-all shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5"
           >
-            Get Started
+            Get Started — ₹79
           </a>
           <a
             href="#how-it-works"
-            className="px-8 py-3.5 text-base font-semibold text-foreground bg-white border border-border rounded-full hover:border-primary/30 hover:bg-primary-light/50 transition-all"
+            className="px-8 py-3.5 text-base font-semibold text-foreground bg-surface border border-border rounded-full hover:border-primary/30 hover:bg-primary/5 transition-all"
           >
-            Install Extension →
+            See How It Works →
           </a>
         </div>
 
@@ -53,7 +53,7 @@ export default function Hero() {
               {[...Array(4)].map((_, i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent border-2 border-white"
+                  className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent border-2 border-background"
                 />
               ))}
             </div>

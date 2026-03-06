@@ -10,6 +10,9 @@
 // NOTE: Background service worker mein CONFIG object available nahi hota
 const SUPABASE_URL = "https://zxborvqzttyofyrksznw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4Ym9ydnF6dHR5b2Z5cmtzem53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NTEwOTIsImV4cCI6MjA4NzIyNzA5Mn0.xM7RBHGrb7tKP2kCqCui0-3gSXQKi11jbG8s92C5cw4";
+const SUPABASE_SESSION_KEY = 'sbSession';
+const LEGACY_SUPABASE_SESSION_KEY = 'sb-zxborvqzttyofyrksznw-auth-token';
+const LEGACY_SUPABASE_SESSION_KEY_2 = 'supabaseSession';
 
 // ── OAuth In-Progress Lock (prevents duplicate flows) ──
 let oauthInProgress = false;
@@ -81,7 +84,110 @@ async function supabaseExchangeCodeForSession(code, verifier) {
 // ── BackgroundService Class ───────────────────────────────────
 class BackgroundService {
     constructor() {
+        this.restoreSessionPromise = this.restoreSession();
         this.initializeListeners();
+    }
+
+    async handleSupabaseAuthStateChange(event, session) {
+        if (session) {
+            await chrome.storage.local.set({ [SUPABASE_SESSION_KEY]: session });
+            await chrome.storage.local.remove(LEGACY_SUPABASE_SESSION_KEY);
+        } else {
+            await chrome.storage.local.remove([SUPABASE_SESSION_KEY, LEGACY_SUPABASE_SESSION_KEY, LEGACY_SUPABASE_SESSION_KEY_2]);
+        }
+        console.log('[AUTH_STATE]', event, '| hasSession:', !!session);
+    }
+
+    async fetchProfileFromSession(session) {
+        if (!session?.access_token) return null;
+
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            method: 'GET',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${session.access_token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Failed to fetch profile (${response.status}): ${errText}`);
+        }
+
+        const user = await response.json();
+        const userProfile = {
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+        };
+
+        await chrome.storage.local.set({ user: userProfile });
+        return userProfile;
+    }
+
+    async refreshSupabaseSession(refreshToken) {
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY
+            },
+            body: JSON.stringify({ refresh_token: refreshToken })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Refresh session failed (${response.status}): ${errText}`);
+        }
+
+        const refreshed = await response.json();
+        return {
+            access_token: refreshed.access_token,
+            refresh_token: refreshed.refresh_token || refreshToken,
+            expires_at: Math.floor(Date.now() / 1000) + (refreshed.expires_in || 3600),
+            expires_in: refreshed.expires_in || 3600,
+            token_type: refreshed.token_type || 'bearer',
+            user: refreshed.user || null
+        };
+    }
+
+    async restoreSession() {
+        try {
+            const stored = await chrome.storage.local.get([SUPABASE_SESSION_KEY, LEGACY_SUPABASE_SESSION_KEY, LEGACY_SUPABASE_SESSION_KEY_2]);
+            let session = stored[SUPABASE_SESSION_KEY] || stored[LEGACY_SUPABASE_SESSION_KEY] || stored[LEGACY_SUPABASE_SESSION_KEY_2] || null;
+
+            if (!session) {
+                console.log('[SESSION] No stored Supabase session to restore');
+                return;
+            }
+
+            // Migrate from legacy keys to new key
+            if (!stored[SUPABASE_SESSION_KEY] && (stored[LEGACY_SUPABASE_SESSION_KEY] || stored[LEGACY_SUPABASE_SESSION_KEY_2])) {
+                const legacySession = stored[LEGACY_SUPABASE_SESSION_KEY] || stored[LEGACY_SUPABASE_SESSION_KEY_2];
+                await chrome.storage.local.set({ [SUPABASE_SESSION_KEY]: legacySession });
+                await chrome.storage.local.remove([LEGACY_SUPABASE_SESSION_KEY, LEGACY_SUPABASE_SESSION_KEY_2]);
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+            const isExpired = session.expires_at ? session.expires_at <= (now + 30) : false;
+
+            if (isExpired) {
+                if (!session.refresh_token) {
+                    await this.handleSupabaseAuthStateChange('SIGNED_OUT', null);
+                    await chrome.storage.local.remove(['user']);
+                    return;
+                }
+                session = await this.refreshSupabaseSession(session.refresh_token);
+            }
+
+            await this.handleSupabaseAuthStateChange('INITIAL_SESSION', session);
+            await this.fetchProfileFromSession(session);
+            console.log('[SESSION] Supabase session restored successfully');
+        } catch (error) {
+            console.error('[SESSION] Restore failed:', error);
+            await this.handleSupabaseAuthStateChange('SIGNED_OUT', null);
+            await chrome.storage.local.remove(['user']);
+        }
     }
 
     // ── Setup all event listeners ─────────────────────────────
@@ -93,25 +199,299 @@ class BackgroundService {
             }
         });
 
-        // Message listener — OAuth handled separately (needs async callback)
+        // Single unified message router — all actions use message.action (or message.type as fallback)
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            console.log("[BACKGROUND] Message received:", message); // User requested log
+            console.log("[BACKGROUND] Message received:", message);
 
-            // ── Warmup ping — wakes the service worker so the next message succeeds ──
-            if (message.type === 'PING') {
-                console.log('[SW_READY] Service worker alive and responding to PING');
-                sendResponse({ ok: true });
-                return true;
+            const actionKey = message.action || message.type;
+
+            if (!actionKey) {
+                console.warn("[BACKGROUND] Missing action/type in message:", message);
+                return;
             }
 
-            if (message.type === 'GOOGLE_LOGIN') { // Changed to type: GOOGLE_LOGIN
-                console.log("[BACKGROUND] GOOGLE_LOGIN received");
-                this.handleGoogleOAuth(sendResponse);
-                return true; // Keep channel open for async response
-            }
+            const payload = message.payload || {};
 
-            this.handleMessage(message, sender, sendResponse);
-            return true; // Keep channel open for all async responses
+            switch (actionKey) {
+                // ── Warmup ping — wakes the service worker ──
+                case 'PING':
+                    console.log('[SW_READY] Service worker alive and responding to PING');
+                    sendResponse({ ok: true });
+                    return true;
+
+                // ── Google OAuth ──
+                case 'GOOGLE_LOGIN':
+                    console.log("[BACKGROUND] GOOGLE_LOGIN received");
+                    this.handleGoogleOAuth(sendResponse);
+                    return true;
+
+                // ── Get user profile / login status ──
+                case 'GET_PROFILE':
+                case 'GET_USER_STATUS': {
+                    (async () => {
+                        try {
+                            await this.restoreSessionPromise;
+                            const stored = await chrome.storage.local.get(['user']);
+                            const sessionCheck = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
+                            const hasSession = !!sessionCheck[SUPABASE_SESSION_KEY];
+                            sendResponse({
+                                success: true,
+                                isLoggedIn: !!(stored.user && hasSession),
+                                user: stored.user
+                            });
+                        } catch (error) {
+                            console.error('GET_PROFILE error:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                    })();
+                    return true;
+                }
+
+                // ── Auth success from popup ──
+                case 'AUTH_SUCCESS': {
+                    // message uses { type: 'AUTH_SUCCESS', session } — handle both .action and .type
+                    const authSession = message.session || payload.session;
+                    if (authSession?.user) {
+                        console.log('[AUTH_SUCCESS] User logged in:', authSession.user.email);
+                        chrome.storage.local.set({
+                            user: {
+                                id: authSession.user.id,
+                                email: authSession.user.email,
+                                name: authSession.user.user_metadata?.full_name || authSession.user.email?.split('@')[0] || 'User'
+                            },
+                            isLoggedIn: true
+                        });
+                    }
+                    sendResponse({ ok: true });
+                    return true;
+                }
+
+                // ── Logout ──
+                case 'LOGOUT': {
+                    (async () => {
+                        try {
+                            await this.handleSupabaseAuthStateChange('SIGNED_OUT', null);
+                            await chrome.storage.local.remove(['user']);
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            console.error('LOGOUT error:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                    })();
+                    return true;
+                }
+
+                // ── Get / refresh credits (live from profiles table) ──
+                case 'REFRESH_CREDITS':
+                case 'GET_CREDITS': {
+                    (async () => {
+                        try {
+                            // Ensure any pending session restore completes first
+                            await this.restoreSessionPromise;
+
+                            // 1. Get the stored session to obtain access_token
+                            const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
+                            const session = sessionStore[SUPABASE_SESSION_KEY];
+                            if (!session?.access_token) {
+                                console.warn('[GET_CREDITS] No session found in storage');
+                                sendResponse({ success: false, allowed: false, credits: 0, error: 'No session' });
+                                return;
+                            }
+
+                            // 2. Identify the current user via Supabase auth
+                            const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+                                headers: {
+                                    apikey: SUPABASE_ANON_KEY,
+                                    Authorization: `Bearer ${session.access_token}`
+                                }
+                            });
+                            if (!userRes.ok) {
+                                const authErrText = await userRes.text().catch(() => '');
+                                console.error('[GET_CREDITS] Auth failed:', userRes.status, authErrText);
+                                sendResponse({ success: false, allowed: false, credits: 0, error: `Auth failed (${userRes.status})` });
+                                return;
+                            }
+                            const authUser = await userRes.json();
+                            console.log('[GET_CREDITS] authUser.id:', authUser.id);
+
+                            // 3. Fetch live credits from profiles table
+                            const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=credits`;
+                            console.log('[GET_CREDITS] Fetching:', profileUrl);
+
+                            const profileRes = await fetch(profileUrl, {
+                                headers: {
+                                    apikey: SUPABASE_ANON_KEY,
+                                    Authorization: `Bearer ${session.access_token}`
+                                }
+                            });
+
+                            if (!profileRes.ok) {
+                                const profileErrText = await profileRes.text().catch(() => '');
+                                console.error('[GET_CREDITS] Profile fetch failed:', profileRes.status, profileErrText);
+                                sendResponse({ success: false, allowed: false, credits: 0, error: `Profile fetch failed (${profileRes.status})` });
+                                return;
+                            }
+
+                            const profiles = await profileRes.json();
+                            console.log('[GET_CREDITS] Raw profiles response:', JSON.stringify(profiles));
+
+                            // 4. Handle empty array (RLS policy may be blocking access)
+                            if (!Array.isArray(profiles) || profiles.length === 0) {
+                                console.warn('[GET_CREDITS] Empty profiles array — RLS may be blocking access for user:', authUser.id);
+                                sendResponse({
+                                    success: false,
+                                    allowed: false,
+                                    credits: 0,
+                                    error: 'Profile not found — check RLS policies on profiles table'
+                                });
+                                return;
+                            }
+
+                            // 5. Parse credits
+                            const credits = profiles[0].credits ?? 0;
+
+                            console.log('[GET_CREDITS] credits:', credits, '| allowed:', credits > 0);
+                            sendResponse({
+                                success: true,
+                                allowed: credits > 0,
+                                credits: credits
+                            });
+                        } catch (error) {
+                            console.error('[GET_CREDITS] Unexpected error:', error);
+                            sendResponse({ success: false, allowed: false, credits: 0, error: error.message });
+                        }
+                    })();
+                    return true;
+                }
+
+                // ── Deduct credits via Supabase RPC ──
+                case 'DEDUCT_CREDITS': {
+                    const deductAmount = payload.amount || message.amount || 1;
+                    (async () => {
+                        try {
+                            await this.restoreSessionPromise;
+
+                            const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
+                            const session = sessionStore[SUPABASE_SESSION_KEY];
+                            if (!session?.access_token) {
+                                sendResponse({ success: false, remaining: 0, error: 'No session' });
+                                return;
+                            }
+
+                            // Call the deduct_credit RPC (handles balance check + deduction atomically)
+                            const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deduct_credit`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    apikey: SUPABASE_ANON_KEY,
+                                    Authorization: `Bearer ${session.access_token}`
+                                },
+                                body: JSON.stringify({ amount: deductAmount })
+                            });
+
+                            if (!rpcRes.ok) {
+                                const errBody = await rpcRes.json().catch(() => ({}));
+                                const errMsg = errBody?.message || errBody?.error || 'Deduct RPC failed';
+                                sendResponse({ success: false, remaining: 0, error: errMsg });
+                                return;
+                            }
+
+                            const remaining = await rpcRes.json();
+
+                            console.log('[DEDUCT_CREDITS] Deducted', deductAmount, '→ remaining:', remaining);
+                            sendResponse({ success: true, remaining });
+                        } catch (error) {
+                            console.error('DEDUCT_CREDITS error:', error);
+                            sendResponse({ success: false, remaining: 0, error: error.message });
+                        }
+                    })();
+                    return true;
+                }
+
+                // ── Run AI Shipping Optimizer (deduct 1 credit) ──
+                case 'RUN_OPTIMIZER': {
+                    (async () => {
+                        try {
+                            await this.restoreSessionPromise;
+
+                            const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
+                            const session = sessionStore[SUPABASE_SESSION_KEY];
+                            if (!session?.access_token) {
+                                sendResponse({ success: false, error: 'No session — please login' });
+                                return;
+                            }
+
+                            // Deduct 1 credit via the existing deduct_credit RPC
+                            const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deduct_credit`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    apikey: SUPABASE_ANON_KEY,
+                                    Authorization: `Bearer ${session.access_token}`
+                                },
+                                body: JSON.stringify({ amount: 1 })
+                            });
+
+                            if (!rpcRes.ok) {
+                                const errBody = await rpcRes.json().catch(() => ({}));
+                                const errMsg = errBody?.message || errBody?.error || 'Credit deduction failed';
+                                console.error('[RUN_OPTIMIZER] Deduction failed:', errMsg);
+                                sendResponse({ success: false, error: errMsg });
+                                return;
+                            }
+
+                            const remaining = await rpcRes.json();
+                            console.log('[RUN_OPTIMIZER] 1 credit deducted → remaining:', remaining);
+                            sendResponse({ success: true, remaining });
+                        } catch (error) {
+                            console.error('[RUN_OPTIMIZER] Error:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                    })();
+                    return true;
+                }
+
+                // ── Generic fetch proxy (popup → service worker → Supabase) ──
+                case 'PROXY_FETCH': {
+                    const fetchUrl = payload.url || message.url;
+                    const fetchOptions = payload.options || message.options || {};
+                    (async () => {
+                        console.log('[SW_FETCH_START]', fetchUrl);
+                        try {
+                            // Auto-inject Authorization header from stored session
+                            // so content.js proxied calls are authenticated
+                            if (!fetchOptions.headers) fetchOptions.headers = {};
+                            if (!fetchOptions.headers['Authorization'] && !fetchOptions.headers['authorization']) {
+                                const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
+                                const sess = sessionStore[SUPABASE_SESSION_KEY];
+                                if (sess?.access_token) {
+                                    fetchOptions.headers['Authorization'] = `Bearer ${sess.access_token}`;
+                                }
+                            }
+                            const res = await fetch(fetchUrl, fetchOptions);
+                            const text = await res.text();
+                            console.log('[SW_FETCH_SUCCESS]', fetchUrl, '→', res.status);
+                            let json = null;
+                            try { json = JSON.parse(text); } catch (_) {}
+                            sendResponse({
+                                success: true,
+                                status: res.status,
+                                ok: res.ok,
+                                body: json !== null ? json : text
+                            });
+                        } catch (err) {
+                            console.error('[SW_FETCH_ERROR]', fetchUrl, err.message);
+                            sendResponse({ success: false, error: err.message });
+                        }
+                    })();
+                    return true;
+                }
+
+                default:
+                    console.warn("[BACKGROUND] Unknown action:", message.action);
+                    sendResponse({ success: false, error: 'Unknown action: ' + message.action });
+                    return true;
+            }
         });
     }
 
@@ -125,75 +505,6 @@ class BackgroundService {
                 compressionLevel: 0.85
             }
         });
-    }
-
-    // ── Central message handler ───────────────────────────────
-    async handleMessage(message, sender, sendResponse) {
-        try {
-            switch (message.type) {
-
-                // Check if user is logged in
-                case 'GET_USER_STATUS': {
-                    const stored = await chrome.storage.local.get(['user']);
-                    // Check for Supabase SDK session key only (SDK manages persistence)
-                    const sbSessionKey = `sb-zxborvqzttyofyrksznw-auth-token`;
-                    const sessionCheck = await chrome.storage.local.get([sbSessionKey]);
-                    const hasSession = !!sessionCheck[sbSessionKey];
-                    sendResponse({
-                        success: true,
-                        isLoggedIn: !!(stored.user && hasSession),
-                        user: stored.user
-                    });
-                    break;
-                }
-
-                // Logout — clear user data (Supabase SDK handles session cleanup)
-                case 'LOGOUT': {
-                    await chrome.storage.local.remove(['user']);
-                    sendResponse({ success: true });
-                    break;
-                }
-
-                // Fetch current credit balance
-                case 'GET_CREDITS': {
-                    const userData = await chrome.storage.local.get(['user']);
-                    sendResponse({
-                        success: true,
-                        credits: userData.user?.credits || 0,
-                        unlimitedUntil: userData.user?.unlimitedUntil
-                    });
-                    break;
-                }
-
-                // ── Generic fetch proxy (popup → service worker → Supabase) ──
-                case 'PROXY_FETCH': {
-                    console.log('[SW_FETCH_START]', message.url);
-                    try {
-                        const res = await fetch(message.url, message.options || {});
-                        const text = await res.text();
-                        console.log('[SW_FETCH_SUCCESS]', message.url, '→', res.status);
-                        let json = null;
-                        try { json = JSON.parse(text); } catch (_) {}
-                        sendResponse({
-                            success: true,
-                            status: res.status,
-                            ok: res.ok,
-                            body: json !== null ? json : text
-                        });
-                    } catch (err) {
-                        console.error('[SW_FETCH_ERROR]', message.url, err.message);
-                        sendResponse({ success: false, error: err.message });
-                    }
-                    break;
-                }
-
-                default:
-                    sendResponse({ success: false, error: 'Unknown message type' });
-            }
-        } catch (error) {
-            console.error('handleMessage error:', error);
-            sendResponse({ success: false, error: error.message });
-        }
     }
 
     // ── Google OAuth Flow (with PKCE support) ────────────────────────────────
@@ -395,7 +706,6 @@ class BackgroundService {
                             }
 
                             // ── Persist session to chrome.storage.local ──
-                            const sbSessionKey = 'sb-zxborvqzttyofyrksznw-auth-token';
                             const sessionPayload = {
                                 access_token: tokenData.access_token,
                                 refresh_token: tokenData.refresh_token || '',
@@ -404,19 +714,9 @@ class BackgroundService {
                                 token_type: tokenData.token_type || 'bearer',
                                 user: tokenData.user || null
                             };
-                            await chrome.storage.local.set({ [sbSessionKey]: sessionPayload });
+                            await this.handleSupabaseAuthStateChange('SIGNED_IN', sessionPayload);
+                            await this.fetchProfileFromSession(sessionPayload);
                             console.log('[SESSION] Stored successfully');
-
-                            // Also persist user profile object
-                            if (tokenData.user) {
-                                const userProfile = {
-                                    id: tokenData.user.id,
-                                    email: tokenData.user.email,
-                                    name: tokenData.user.user_metadata?.full_name || tokenData.user.email?.split('@')[0] || 'User'
-                                };
-                                await chrome.storage.local.set({ user: userProfile });
-                                console.log('[OAUTH_PERSIST] User profile saved:', userProfile.email);
-                            }
 
                             const responsePayload = {
                                 success: true,
@@ -433,10 +733,12 @@ class BackgroundService {
                             // Broadcast session to any other extension pages
                             try {
                                 chrome.runtime.sendMessage({
-                                    type: 'SUPABASE_SESSION',
-                                    session: {
-                                        access_token: tokenData.access_token,
-                                        refresh_token: tokenData.refresh_token
+                                    action: 'SUPABASE_SESSION',
+                                    payload: {
+                                        session: {
+                                            access_token: tokenData.access_token,
+                                            refresh_token: tokenData.refresh_token
+                                        }
                                     }
                                 });
                             } catch (_) { /* no receivers is OK */ }
@@ -450,7 +752,6 @@ class BackgroundService {
                             console.log('[OAUTH_TOKEN] access_token found in hash (implicit flow)');
 
                             // Persist implicit flow session too
-                            const sbSessionKey2 = 'sb-zxborvqzttyofyrksznw-auth-token';
                             const implicitSession = {
                                 access_token: hashAccessToken,
                                 refresh_token: hashParams.get('refresh_token') || '',
@@ -459,7 +760,8 @@ class BackgroundService {
                                 token_type: hashParams.get('token_type') || 'bearer',
                                 user: null
                             };
-                            await chrome.storage.local.set({ [sbSessionKey2]: implicitSession });
+                            await this.handleSupabaseAuthStateChange('SIGNED_IN', implicitSession);
+                            await this.fetchProfileFromSession(implicitSession).catch(() => { });
                             console.log('[SESSION] Stored successfully');
 
                             const responsePayload = {
@@ -494,6 +796,40 @@ class BackgroundService {
         }
     }
 }
+
+// ── Keep Service Worker Alive ──────────────────────────────────
+chrome.runtime.onInstalled.addListener(() => {
+    console.log("Extension Installed");
+});
+
+chrome.runtime.onStartup.addListener(() => {
+    console.log("Extension Started");
+});
+
+// keep service worker alive when messages come
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.action === "PING") {
+        sendResponse({ ok: true });
+        return true;
+    }
+});
+
+// ── Restore session from supabaseSession on extension load ──
+chrome.storage.local.get(['supabaseSession'], async (result) => {
+    if (result.supabaseSession) {
+        try {
+            // Sync supabaseSession → sbSession so BackgroundService picks it up
+            const existing = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
+            if (!existing[SUPABASE_SESSION_KEY]) {
+                await chrome.storage.local.set({ [SUPABASE_SESSION_KEY]: result.supabaseSession });
+                console.log('[SESSION_RESTORE] supabaseSession synced to sbSession');
+            }
+            console.log('[SESSION_RESTORE] Session restored from supabaseSession');
+        } catch (e) {
+            console.error('[SESSION_RESTORE] Error restoring supabaseSession:', e);
+        }
+    }
+});
 
 // ── Bootstrap ─────────────────────────────────────────────────
 new BackgroundService();

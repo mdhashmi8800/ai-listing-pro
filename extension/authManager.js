@@ -17,7 +17,7 @@
 const AuthManager = {
 
     // ── Internal State ─────────────────────────────────────────
-    user: null,   // { id, email, phone, name, credits, plan, unlimitedUntil, is_banned, ban_reason }
+    user: null,   // { id, email, name, credits }
     _sb: null,   // Supabase SDK client reference
     _authChangeListener: null,
 
@@ -72,7 +72,7 @@ const AuthManager = {
 
             // Fallback: try legacy chrome.storage.local session
             const stored = await chrome.storage.local.get(["user", "session"]);
-            if (stored.user && stored.session?.accessToken) {
+            if (stored.user && (stored.session?.accessToken || stored.session?.access_token)) {
                 this.user = stored.user;
 
                 const valid = await this.verifySession(stored.session);
@@ -111,13 +111,17 @@ const AuthManager = {
 
             return new Promise((resolve) => {
                 chrome.runtime.sendMessage(
-                    { action: "startGoogleOAuth" },
+                    { action: "GOOGLE_LOGIN" },
                     async (response) => {
 
                         // ── Background script unavailable → fallback
                         if (chrome.runtime.lastError) {
                             console.warn("Background error:", chrome.runtime.lastError.message);
-                            resolve(await this._googleOAuthFallback());
+                            const fallbackResult = await this._googleOAuthFallback();
+                            if (fallbackResult?.success) {
+                                await this._syncSessionToStorage();
+                            }
+                            resolve(fallbackResult);
                             return;
                         }
 
@@ -126,6 +130,9 @@ const AuthManager = {
                                 response.accessToken,
                                 response.refreshToken
                             );
+                            if (ok) {
+                                await this._syncSessionToStorage();
+                            }
                             resolve(ok
                                 ? { success: true, user: this.user }
                                 : { success: false, error: "Failed to process Google tokens" }
@@ -330,7 +337,9 @@ const AuthManager = {
     verifySession: async function (session) {
         if (!session) return false;
 
-        const token = typeof session === "string" ? session : session.accessToken;
+        const token = typeof session === "string"
+            ? session
+            : (session.accessToken || session.access_token);
         if (!token) return false;
 
         try {
@@ -344,9 +353,10 @@ const AuthManager = {
             if (res.ok) return true;
 
             // Token expired — try refreshing
-            if (res.status === 401 && session.refreshToken) {
+            const refreshToken = session.refreshToken || session.refresh_token;
+            if (res.status === 401 && refreshToken) {
                 console.log("⏰ Token expired, refreshing…");
-                return await this._refreshToken(session.refreshToken);
+                return await this._refreshToken(refreshToken);
             }
         } catch (e) {
             console.error("Session verify error:", e);
@@ -400,6 +410,31 @@ const AuthManager = {
         });
     },
 
+    _syncSessionToStorage: async function () {
+        if (!this._sb?.auth?.getSession) return;
+        try {
+            const { data: { session } } = await this._sb.auth.getSession();
+            if (!session) throw new Error("No session");
+
+            const user = session.user;
+
+            // 🔥 Ensure user exists in public.profiles table
+            await this._sb.from("profiles").upsert({
+                id: user.id,
+                email: user.email,
+                name: user.user_metadata?.full_name || null,
+                credits: CONFIG.DEFAULT_SIGNUP_CREDITS
+            }, { onConflict: 'id', ignoreDuplicates: true });
+
+            await chrome.storage.local.set({
+                user: user,
+                session: session
+            });
+        } catch (e) {
+            console.warn("_syncSessionToStorage error:", e.message);
+        }
+    },
+
     // ══════════════════════════════════════════════════════════
     //  DATABASE SYNC
     // ══════════════════════════════════════════════════════════
@@ -423,19 +458,10 @@ const AuthManager = {
         }
         if (!token) { console.error("❌ No token for DB sync"); return; }
 
-        // ── Get user's IP (best-effort, non-blocking)
-        // Note: inet type in Postgres rejects empty string — must use null
-        let userIp = null;
-        try {
-            const ipRes = await fetch("https://api.ipify.org?format=json");
-            const ipData = await ipRes.json();
-            userIp = ipData.ip || null;   // null-safe for inet column
-        } catch (_) { }
-
         try {
             // Check if user already exists
             const checkRes = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${this.user.id}&select=id,credits,plan,unlimited_until,is_banned,ban_reason`,
+                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${this.user.id}&select=credits`,
                 {
                     headers: {
                         apikey: CONFIG.SUPABASE_ANON_KEY,
@@ -452,10 +478,10 @@ const AuthManager = {
             const existing = await checkRes.json();
 
             if (!existing || existing.length === 0) {
-                // ── NEW USER — create with signup bonus
+                // ── NEW USER — create with signup credits
                 console.log(`✨ New user! Giving ${CONFIG.DEFAULT_SIGNUP_CREDITS} signup credits`);
 
-                const createRes = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/users`, {
+                const createRes = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/profiles`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -466,15 +492,8 @@ const AuthManager = {
                     body: JSON.stringify({
                         id: this.user.id,
                         email: this.user.email || null,
-                        phone: this.user.phone || null,
                         name: this.user.name || null,
-                        avatar_url: this.user.avatarUrl || null,
-                        credits: CONFIG.DEFAULT_SIGNUP_CREDITS,
-                        plan: "free",
-                        // Only include IP fields if we have a valid value
-                        ...(userIp ? { signup_ip: userIp, last_ip: userIp } : {}),
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
+                        credits: CONFIG.DEFAULT_SIGNUP_CREDITS
                     })
                 });
 
@@ -484,41 +503,15 @@ const AuthManager = {
                     return;
                 }
 
-                // Populate local user with DB data
                 this.user.credits = CONFIG.DEFAULT_SIGNUP_CREDITS;
-                this.user.plan = "free";
-                this.user.is_banned = false;
-                this.user.ban_reason = null;
-                this.user.unlimitedUntil = null;
-
                 console.log("✅ New user created in DB");
 
             } else {
-                // ── RETURNING USER — read values from DB
+                // ── RETURNING USER — read credits from DB
                 const dbUser = existing[0];
-                console.log("✅ Returning user, loading DB data");
+                console.log("✅ Returning user, credits:", dbUser.credits);
 
                 this.user.credits = dbUser.credits;
-                this.user.plan = dbUser.plan || "free";
-                this.user.unlimitedUntil = dbUser.unlimited_until || null;
-                this.user.is_banned = dbUser.is_banned || false;
-                this.user.ban_reason = dbUser.ban_reason || null;
-
-                // Update last_ip and updated_at (fire-and-forget, only if IP available)
-                if (userIp) {
-                    fetch(`${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${this.user.id}`, {
-                        method: "PATCH",
-                        headers: {
-                            "Content-Type": "application/json",
-                            apikey: CONFIG.SUPABASE_ANON_KEY,
-                            Authorization: `Bearer ${token}`
-                        },
-                        body: JSON.stringify({
-                            last_ip: userIp,                      // valid inet value
-                            updated_at: new Date().toISOString()
-                        })
-                    }).catch(() => { });
-                }
             }
 
             // ── Persist enriched user to chrome.storage.local
@@ -557,7 +550,7 @@ const AuthManager = {
 
         try {
             const res = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${this.user.id}&select=credits,plan,unlimited_until,is_banned,ban_reason`,
+                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${this.user.id}&select=credits`,
                 {
                     headers: {
                         apikey: CONFIG.SUPABASE_ANON_KEY,
@@ -569,12 +562,7 @@ const AuthManager = {
             if (res.ok) {
                 const data = await res.json();
                 if (data?.[0]) {
-                    const fresh = data[0];
-                    this.user.credits = fresh.credits;
-                    this.user.plan = fresh.plan || "free";
-                    this.user.unlimitedUntil = fresh.unlimited_until || null;
-                    this.user.is_banned = fresh.is_banned || false;
-                    this.user.ban_reason = fresh.ban_reason || null;
+                    this.user.credits = data[0].credits;
                     await chrome.storage.local.set({ user: this.user });
                 }
             }
@@ -597,7 +585,7 @@ const AuthManager = {
      * Returns true if user can perform an action.
      * Shows appropriate error if banned or out of credits.
      */
-    canUseFeature: function (showError = true) {
+    canUseFeature: async function (showError = true) {
         if (!this.user) {
             if (showError) alert("Please login first.");
             return false;
@@ -610,7 +598,9 @@ const AuthManager = {
 
         if (this.hasUnlimitedAccess()) return true;
 
-        if (this.user.credits <= 0) {
+        // Live credit check via background.js → profiles table
+        const hasCredits = await CreditsManager.hasCredits(1);
+        if (!hasCredits) {
             if (showError) alert("⚡ Credits khatam ho gaye!\nUpgrade karo ya credits kharido.");
             return false;
         }
@@ -788,191 +778,181 @@ window.AuthManager = AuthManager;
 
 const CreditsManager = {
 
-    // Get current credits — always returns a number (unlimited plan removed)
+    // ── Helper: send message to background.js and get a promise back ──
+    _bgMessage: function (msg) {
+        return new Promise((resolve) => {
+            try {
+                chrome.runtime.sendMessage(msg, (response) => {
+                    if (chrome.runtime.lastError) {
+                        console.error('❌ Background message error:', chrome.runtime.lastError.message);
+                        resolve(null);
+                        return;
+                    }
+                    resolve(response || null);
+                });
+            } catch (e) {
+                console.error('❌ chrome.runtime.sendMessage failed:', e.message);
+                resolve(null);
+            }
+        });
+    },
+
+    // Get current credits — always returns a number
+    // Fetches LIVE from Supabase session (source of truth)
     getCredits: async function () {
-        await AuthManager.refreshUser();
-        const user = AuthManager.getUser();
-        if (!user) return 0;
-        return user.credits || 0;
+        try {
+            const supabase = window.supabaseClient;
+            if (!supabase) {
+                console.warn('❌ supabaseClient not available, falling back to background');
+                const res = await this._bgMessage({ action: 'GET_CREDITS' });
+                if (!res || !res.success) return 0;
+                return res.credits ?? 0;
+            }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return 0;
+            const userId = session.user.id;
+
+            const { data, error } = await supabase
+                .from('users')
+                .select('credits')
+                .eq('id', userId)
+                .single();
+
+            if (error || !data) return 0;
+            return data.credits ?? 0;
+        } catch (e) {
+            console.error('getCredits error:', e);
+            return 0;
+        }
     },
 
-    // Check if user has credits
+    // Check if user has enough credits (live check via background)
     hasCredits: async function (amount = 1) {
-        const user = AuthManager.getUser();
-        if (user?.is_banned) return false;
-        const credits = await this.getCredits();
-        return credits >= amount;
+        const res = await this._bgMessage({ action: 'GET_CREDITS' });
+        if (!res || !res.success) return false;
+        return (res.credits ?? 0) >= amount;
     },
 
-    // Use credits — 1 credit per optimization
+    // Use / deduct credits — via Supabase RPC deduct_credit
     useCredits: async function (amount = 1) {
-        const credits = await this.getCredits();
-
-        if (credits < amount) {
-            console.log('❌ Insufficient credits:', credits, '<', amount);
-            return { success: false, error: 'Insufficient credits. Upgrade to continue.', remaining: credits };
-        }
-
-        // Deduct credits from server
-        const stored = await chrome.storage.local.get(['user', 'session']);
-        const user = AuthManager.getUser();
-        const token = stored.session?.accessToken || stored.session;
-
-        console.log('💳 Deducting', amount, 'credits. Current:', credits);
-
         try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`,
-                {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`,
-                        'Prefer': 'return=representation'
-                    },
-                    body: JSON.stringify({ credits: credits - amount })
-                }
-            );
-
-            if (response.ok) {
-                const data = await response.json();
-                const newCredits = data[0]?.credits ?? 0;
-                console.log('✅ Credits deducted! New balance:', newCredits);
-                user.credits = newCredits;
-                await chrome.storage.local.set({ user });
-                await this.logUsage(amount);
-                return { success: true, remaining: newCredits };
+            const supabase = window.supabaseClient;
+            if (!supabase) {
+                console.warn('❌ supabaseClient not available, falling back to background');
+                const res = await this._bgMessage({ action: 'DEDUCT_CREDITS', amount });
+                if (!res) return { success: false, error: 'Background unreachable', remaining: 0 };
+                return { success: !!res.success, remaining: res.remaining ?? 0, error: res.error || null };
             }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return { success: false, error: 'No session', remaining: 0 };
+            const userId = session.user.id;
 
-            console.error('❌ Failed to deduct credits. Response:', response.status);
-            return { success: false, error: 'Failed to deduct credits' };
+            const { data, error } = await supabase.rpc('deduct_credit', {
+                uid: userId,
+                amount: amount
+            });
+
+            if (error) {
+                return { success: false, error: error.message, remaining: 0 };
+            }
+            return { success: true, remaining: data ?? 0, error: null };
         } catch (e) {
-            console.error('❌ Credit deduction error:', e);
-            return { success: false, error: e.message };
+            console.error('useCredits error:', e);
+            return { success: false, error: e.message, remaining: 0 };
         }
     },
 
-    // Add credits (from purchase or promo)
+    // Add credits — proxied through background PROXY_FETCH to profiles table
     addCredits: async function (amount, source = 'purchase') {
-        const stored = await chrome.storage.local.get(['user', 'session']);
-        const user = AuthManager.getUser();
-        if (!user) return { success: false, error: 'Not logged in' };
+        // First get current credits
+        const current = await this.getCredits();
+        const newCredits = current + amount;
 
-        const currentCredits = await this.getCredits();
-        const newCredits = currentCredits + amount;
-        const token = stored.session?.accessToken || stored.session;
-
-        try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`,
-                {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`,
-                        'Prefer': 'return=representation'
-                    },
-                    body: JSON.stringify({ credits: newCredits })
-                }
-            );
-
-            if (response.ok) {
-                user.credits = newCredits;
-                await chrome.storage.local.set({ user });
-                return { success: true, credits: newCredits };
+        // Use PROXY_FETCH to PATCH profiles (background has the session)
+        const res = await this._bgMessage({
+            action: 'PROXY_FETCH',
+            url: `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${AuthManager.getUser()?.id}`,
+            options: {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({ credits: newCredits })
             }
+        });
 
-            return { success: false, error: 'Failed to add credits' };
-        } catch (e) {
-            return { success: false, error: e.message };
+        if (res?.success && res?.ok) {
+            const updated = Array.isArray(res.body) ? res.body[0]?.credits : newCredits;
+            return { success: true, credits: updated ?? newCredits };
         }
+        return { success: false, error: res?.error || 'Failed to add credits' };
     },
 
-    // Set unlimited subscription
+    // Set unlimited subscription (proxy through background)
     setUnlimited: async function (days = 30) {
-        const stored = await chrome.storage.local.get(['user', 'session']);
         const user = AuthManager.getUser();
         if (!user) return { success: false, error: 'Not logged in' };
 
         const unlimitedUntil = new Date();
         unlimitedUntil.setDate(unlimitedUntil.getDate() + days);
 
-        // Handle both session formats
-        const token = stored.session?.accessToken || stored.session;
-
-        try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/users?id=eq.${user.id}`,
-                {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`,
-                        'Prefer': 'return=representation'
-                    },
-                    body: JSON.stringify({
-                        unlimited_until: unlimitedUntil.toISOString()
-                    })
-                }
-            );
-
-            if (response.ok) {
-                user.unlimitedUntil = unlimitedUntil.toISOString();
-                await chrome.storage.local.set({ user });
-                return { success: true, unlimitedUntil: user.unlimitedUntil };
+        const res = await this._bgMessage({
+            action: 'PROXY_FETCH',
+            url: `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`,
+            options: {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': CONFIG.SUPABASE_ANON_KEY,
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({ unlimited_until: unlimitedUntil.toISOString() })
             }
+        });
 
-            return { success: false, error: 'Failed to set unlimited' };
-        } catch (e) {
-            return { success: false, error: e.message };
+        if (res?.success && res?.ok) {
+            user.unlimitedUntil = unlimitedUntil.toISOString();
+            await chrome.storage.local.set({ user });
+            return { success: true, unlimitedUntil: user.unlimitedUntil };
         }
+        return { success: false, error: 'Failed to set unlimited' };
     },
 
-    // Apply promo code
+    // Apply promo code (proxy all Supabase calls through background)
     applyPromoCode: async function (code) {
-        const stored = await chrome.storage.local.get(['user', 'session']);
         const user = AuthManager.getUser();
         if (!user) return { success: false, error: 'Not logged in' };
 
-        // Handle both session formats
-        const token = stored.session?.accessToken || stored.session;
-
         try {
             // Check promo code
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/promo_codes?code=eq.${code.toUpperCase()}&is_active=eq.true&select=*`,
-                {
-                    headers: {
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`
-                    }
+            const promoRes = await this._bgMessage({
+                action: 'PROXY_FETCH',
+                url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_codes?code=eq.${code.toUpperCase()}&is_active=eq.true&select=*`,
+                options: {
+                    method: 'GET',
+                    headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY }
                 }
-            );
+            });
 
-            const promos = await response.json();
-
-            if (!promos || promos.length === 0) {
+            const promos = promoRes?.body;
+            if (!promos || !Array.isArray(promos) || promos.length === 0) {
                 return { success: false, error: 'Invalid or expired promo code' };
             }
-
             const promo = promos[0];
 
             // Check if already used by this user
-            const usageCheck = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/promo_usage?user_id=eq.${user.id}&promo_id=eq.${promo.id}&select=id`,
-                {
-                    headers: {
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`
-                    }
+            const usageRes = await this._bgMessage({
+                action: 'PROXY_FETCH',
+                url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_usage?user_id=eq.${user.id}&promo_id=eq.${promo.id}&select=id`,
+                options: {
+                    method: 'GET',
+                    headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY }
                 }
-            );
-
-            const usages = await usageCheck.json();
-            if (usages && usages.length > 0) {
+            });
+            const usages = usageRes?.body;
+            if (usages && Array.isArray(usages) && usages.length > 0) {
                 return { success: false, error: 'You have already used this promo code' };
             }
 
@@ -981,87 +961,59 @@ const CreditsManager = {
                 return { success: false, error: 'Promo code has reached maximum uses' };
             }
 
-            // Apply credits — no unlimited promo type in new model
-            // If promo type is 'unlimited' (legacy), treat as extra credit grant
-            let result;
-            if (promo.type === 'unlimited') {
-                // Convert unlimited promos to a fixed credit grant
-                const creditGrant = promo.credits || 100;
-                result = await this.addCredits(creditGrant, 'promo');
-            } else {
-                result = await this.addCredits(promo.credits, 'promo');
-            }
+            // Apply credits
+            const creditGrant = (promo.type === 'unlimited') ? (promo.credits || 100) : promo.credits;
+            const result = await this.addCredits(creditGrant, 'promo');
 
             if (result.success) {
-                // Record usage
-                await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/promo_usage`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        user_id: user.id,
-                        promo_id: promo.id,
-                        used_at: new Date().toISOString()
-                    })
+                // Record usage (fire-and-forget)
+                this._bgMessage({
+                    action: 'PROXY_FETCH',
+                    url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_usage`,
+                    options: {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': CONFIG.SUPABASE_ANON_KEY
+                        },
+                        body: JSON.stringify({
+                            user_id: user.id,
+                            promo_id: promo.id,
+                            used_at: new Date().toISOString()
+                        })
+                    }
                 });
 
-                // Update promo used count
-                await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/promo_codes?id=eq.${promo.id}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': CONFIG.SUPABASE_ANON_KEY,
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        used_count: (promo.used_count || 0) + 1
-                    })
+                // Update promo used count (fire-and-forget)
+                this._bgMessage({
+                    action: 'PROXY_FETCH',
+                    url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_codes?id=eq.${promo.id}`,
+                    options: {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': CONFIG.SUPABASE_ANON_KEY
+                        },
+                        body: JSON.stringify({ used_count: (promo.used_count || 0) + 1 })
+                    }
                 });
 
                 return {
                     success: true,
-                    message: `🎉 ${promo.credits || 100} credits added!`,
-                    credits: promo.credits,
+                    message: `🎉 ${creditGrant} credits added!`,
+                    credits: creditGrant,
                     type: promo.type
                 };
             }
-
             return result;
         } catch (e) {
             return { success: false, error: e.message };
         }
     },
 
-    // Log usage for analytics
-    logUsage: async function (credits) {
-        const stored = await chrome.storage.local.get(['user', 'session']);
-        const user = AuthManager.getUser();
-        if (!user) return;
-
-        // Handle both session formats
-        const token = stored.session?.accessToken || stored.session;
-
-        try {
-            await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/usage_logs`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    user_id: user.id,
-                    credits_used: credits,
-                    action: 'optimization',
-                    created_at: new Date().toISOString()
-                })
-            });
-        } catch (e) {
-            console.error('Log usage error:', e);
-        }
+    // Log usage — no longer needed in content.js, background handles it in DEDUCT_CREDITS
+    logUsage: async function (_credits) {
+        // No-op: usage logging is handled inside background.js DEDUCT_CREDITS handler
     },
 
     // Get credits display text
@@ -1070,19 +1022,21 @@ const CreditsManager = {
         return `${credits} credits`;
     },
 
-    // Get user transaction history
+    // Get user transaction history (proxy through background)
     getHistory: async function (limit = 20) {
         const user = AuthManager.getUser();
         if (!user) return [];
-        const stored = await chrome.storage.local.get(['session']);
-        const token = stored.session?.accessToken || stored.session;
         try {
-            const res = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/credit_transactions?user_id=eq.${user.id}&select=delta,reason,meta,created_at&order=created_at.desc&limit=${limit}`,
-                { headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` } }
-            );
-            if (!res.ok) return [];
-            return await res.json();
+            const res = await this._bgMessage({
+                action: 'PROXY_FETCH',
+                url: `${CONFIG.SUPABASE_URL}/rest/v1/credit_transactions?user_id=eq.${user.id}&select=delta,reason,meta,created_at&order=created_at.desc&limit=${limit}`,
+                options: {
+                    method: 'GET',
+                    headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY }
+                }
+            });
+            if (res?.success && Array.isArray(res.body)) return res.body;
+            return [];
         } catch (e) { return []; }
     }
 };

@@ -58,7 +58,7 @@ serve(async (req) => {
 
         // 3. Get User to check first_purchase bonus
         const { data: user, error: userError } = await supabase
-            .from('users')
+            .from('profiles')
             .select('credits, first_purchase')
             .eq('id', user_id)
             .single()
@@ -84,7 +84,7 @@ serve(async (req) => {
 
         // Update credits
         const { error: updateError } = await supabase
-            .from('users')
+            .from('profiles')
             .update({
                 credits: user.credits + finalCreditsToAdd,
                 first_purchase: false,

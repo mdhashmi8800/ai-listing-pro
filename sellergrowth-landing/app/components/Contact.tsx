@@ -16,7 +16,7 @@ export default function Contact() {
 
           <a
             href="mailto:support@sellergrowth.xyz"
-            className="inline-flex items-center gap-3 px-8 py-4 bg-white border border-border rounded-2xl hover:border-primary/30 hover:shadow-lg transition-all group"
+            className="inline-flex items-center gap-3 px-8 py-4 bg-surface-2 border border-border rounded-2xl hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all group"
           >
             <svg
               className="w-6 h-6 text-primary"

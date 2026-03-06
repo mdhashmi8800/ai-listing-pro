@@ -8,683 +8,763 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    /* ═══════════════════════════════════════
+       AI Listing Pro — Dark Theme Popup
+    ═══════════════════════════════════════ */
+    :root {
+      --primary: #7c3aed;
+      --primary-hover: #6d28d9;
+      --primary-glow: rgba(124, 58, 237, 0.35);
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --bg: #000000;
+      --surface: #111111;
+      --surface-2: #1a1a1a;
+      --surface-3: #222222;
+      --border: #2a2a2a;
+      --border-hover: #3a3a3a;
+      --text: #ffffff;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --transition: all 0.2s ease;
     }
 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      font-family: 'Inter', sans-serif;
-      width: 400px;
-      min-height: 580px;
-      background: #F8FAFC;
-      color: #0F172A;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      width: 380px;
+      min-height: 500px;
+      background: var(--bg);
+      color: var(--text);
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
+
+    .hidden { display: none !important; }
 
     /* ── Header ── */
     .header {
-      background: #FFFFFF;
-      padding: 18px 24px 14px;
-      text-align: center;
-      border-bottom: 1px solid #E2E8F0;
-    }
-
-    .header-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 6px;
-      color: #2563EB;
-    }
-
-    .header h1 {
-      font-size: 17px;
-      font-weight: 700;
-      color: #0F172A;
-      margin-bottom: 2px;
-    }
-
-    .header p {
-      font-size: 11px;
-      color: #64748B;
-      font-weight: 400;
-    }
-
-    .powered-label {
-      font-size: 10px;
-      color: #94A3B8;
-      margin-top: 4px;
-      font-weight: 500;
-    }
-
-    .content {
-      padding: 16px 20px;
-    }
-
-    .glass-card {
-      background: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      border-radius: 10px;
-      padding: 18px;
-      margin-bottom: 14px;
-    }
-
-    .welcome-text {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-
-    .welcome-text h2 {
-      font-size: 16px;
-      font-weight: 700;
-      color: #0F172A;
-      margin-bottom: 4px;
-    }
-
-    .welcome-text p {
-      font-size: 12px;
-      color: #64748B;
-      line-height: 1.5;
-    }
-
-    .divider {
+      background: var(--surface);
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       gap: 12px;
-      margin: 14px 0;
     }
 
-    .divider::before,
-    .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: #E2E8F0;
+    .header-logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
 
-    .divider span {
-      font-size: 11px;
-      color: #94A3B8;
-      font-weight: 500;
+    .header-logo svg { width: 20px; height: 20px; }
+
+    .header-info { flex: 1; }
+
+    .header-info h1 {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      line-height: 1.2;
+    }
+
+    .header-info p {
+      font-size: 10px; color: var(--text-muted); font-weight: 400;
+      margin-top: 1px;
+    }
+
+    .header-badge {
+      font-size: 9px; font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(16, 185, 129, 0.3);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
-    /* ── Buttons ── */
-    .btn {
-      width: 100%;
-      padding: 10px 16px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
+    /* ── Content Area ── */
+    .content { padding: 16px 16px 12px; }
+
+    /* ── Loading State ── */
+    .loading-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 60px 20px; text-align: center;
+    }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-state p {
+      font-size: 13px; color: var(--text-secondary);
       font-weight: 500;
-      font-family: 'Inter', sans-serif;
-      cursor: pointer;
-      transition: background 0.15s ease, transform 0.1s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
     }
 
-    .btn:active {
-      transform: scale(0.98);
+    /* ── Auth Card (Signed Out) ── */
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 20px;
+      text-align: center;
     }
 
-    .btn-primary {
-      background: #2563EB;
-      color: #fff;
+    .auth-card .auth-icon {
+      width: 56px; height: 56px;
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+      box-shadow: 0 8px 24px var(--primary-glow);
     }
 
-    .btn-primary:hover {
-      background: #1D4ED8;
+    .auth-card .auth-icon svg { width: 28px; height: 28px; }
+
+    .auth-card h2 {
+      font-size: 18px; font-weight: 800; color: var(--text);
+      margin-bottom: 6px;
     }
 
-    .btn-success {
-      background: #10B981;
-      color: #fff;
-      margin-top: 10px;
+    .auth-card .tagline {
+      font-size: 12px; color: var(--text-muted);
+      line-height: 1.5; margin-bottom: 20px;
     }
 
-    .btn-success:hover {
-      background: #059669;
+    /* Feature pills */
+    .features-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 20px;
     }
 
-    .btn-outline {
-      background: #fff;
-      border: 1px solid #E2E8F0;
-      color: #64748B;
-      margin-top: 8px;
+    .feature-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 11px; color: var(--text-secondary);
+      font-weight: 500;
+      transition: var(--transition);
     }
 
-    .btn-outline:hover {
-      background: #F8FAFC;
-      border-color: #CBD5E1;
+    .feature-pill:hover {
+      border-color: var(--primary);
+      background: rgba(124, 58, 237, 0.08);
+      color: var(--text);
     }
 
+    .feature-pill .feat-icon {
+      font-size: 14px; line-height: 1; flex-shrink: 0;
+    }
+
+    /* Google button */
     .btn-google {
-      width: 100%;
-      padding: 11px 16px;
-      background: #fff;
-      color: #3C4043;
-      border: 1px solid #CBD5E1;
-      border-radius: 8px;
-      font-weight: 500;
-      font-size: 14px;
-      font-family: 'Inter', sans-serif;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: background 0.15s ease;
+      width: 100%; padding: 12px 16px;
+      background: #ffffff; color: #1f2937;
+      border: none; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 600;
+      font-family: inherit; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: var(--transition);
     }
 
-    .btn-google:hover {
-      background: #F8FAFC;
+    .btn-google:hover { background: #f3f4f6; transform: translateY(-1px); }
+    .btn-google:active { transform: scale(0.98); }
+    .btn-google:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-google svg { flex-shrink: 0; }
+
+    .auth-footer {
+      font-size: 10px; color: var(--text-muted);
+      margin-top: 14px; line-height: 1.5;
     }
 
-    .btn-google:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    /* ── Subscribed State ── */
+    .sub-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      margin-bottom: 12px;
     }
 
-    .btn-google svg {
-      flex-shrink: 0;
-    }
-
-    /* ── Signup Bonus ── */
-    .signup-bonus {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 10px 14px;
-      background: #ECFDF5;
-      border: 1px solid #10B981;
-      border-radius: 8px;
-      margin-top: 10px;
-      font-size: 12px;
-      color: #065F46;
-      line-height: 1.5;
-    }
-
-    .signup-bonus strong {
-      color: #059669;
-      font-weight: 700;
-    }
-
-    /* ── User Section ── */
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .user-row {
+      display: flex; align-items: center; gap: 12px;
       margin-bottom: 14px;
     }
 
     .user-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #2563EB, #7C3AED);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 16px;
-      color: #fff;
+      width: 42px; height: 42px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 17px; color: #fff;
       flex-shrink: 0;
     }
 
-    .user-details {
-      flex: 1;
+    .user-meta { flex: 1; }
+
+    .user-name { font-weight: 600; font-size: 14px; color: var(--text); }
+
+    .user-email { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+    .sub-status-bar {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
     }
 
-    .user-name {
-      font-weight: 600;
-      font-size: 14px;
-      color: #0F172A;
-      margin-bottom: 2px;
+    .sub-status-row {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 6px;
     }
 
-    .user-email {
-      font-size: 11px;
-      color: #94A3B8;
+    .sub-status-row:last-child { margin-bottom: 0; }
+
+    .sub-label {
+      font-size: 11px; color: var(--text-muted); font-weight: 500;
     }
 
-    /* ── Credits Card ── */
-    .credits-card {
-      background: linear-gradient(135deg, #EFF6FF, #F0FDF4);
-      border: 1.5px solid #2563EB;
-      border-radius: 10px;
-      padding: 16px 20px;
-      text-align: center;
+    .sub-value {
+      font-size: 12px; font-weight: 600; color: var(--text);
+    }
+
+    .sub-value.active {
+      color: var(--accent);
+    }
+
+    .sub-value.expiring {
+      color: var(--warning);
+    }
+
+    /* Open Dashboard Button */
+    .btn-dashboard {
+      width: 100%; padding: 14px 20px;
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      color: #fff; border: none;
+      border-radius: var(--radius);
+      font-size: 15px; font-weight: 700;
+      font-family: inherit; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      position: relative; overflow: hidden;
+      transition: var(--transition);
+      box-shadow: 0 4px 16px var(--primary-glow);
       margin-bottom: 14px;
-      transition: border-color 0.2s;
     }
 
-    .credits-card.low-credits {
-      border-color: #F59E0B;
-      background: linear-gradient(135deg, #FFFBEB, #FEF2F2);
+    .btn-dashboard:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px var(--primary-glow);
     }
 
-    .credits-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 6px;
-      color: #2563EB;
+    .btn-dashboard:active { transform: scale(0.98); }
+
+    .btn-dashboard::before {
+      content: '';
+      position: absolute; top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: linear-gradient(45deg, transparent 40%,
+        rgba(255,255,255,0.12) 50%, transparent 60%);
+      animation: shimmer 2.5s infinite;
     }
 
-    .credits-label {
-      font-size: 10px;
-      color: #64748B;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    /* Quick Tools Grid */
+    .tools-label {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 10px;
+    }
+
+    .tools-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .tool-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .tool-card:hover {
+      border-color: var(--primary);
+      background: rgba(124, 58, 237, 0.06);
+      transform: translateY(-1px);
+    }
+
+    .tool-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+
+    .tool-icon.purple { background: rgba(124, 58, 237, 0.15); }
+    .tool-icon.green { background: rgba(16, 185, 129, 0.15); }
+    .tool-icon.blue { background: rgba(59, 130, 246, 0.15); }
+    .tool-icon.orange { background: rgba(249, 115, 22, 0.15); }
+    .tool-icon.pink { background: rgba(236, 72, 153, 0.15); }
+
+    .tool-name {
+      font-size: 11px; font-weight: 600; color: var(--text);
+      line-height: 1.3;
+    }
+
+    /* ── Not Subscribed / Pricing ── */
+    .pricing-header {
+      text-align: center; margin-bottom: 16px;
+    }
+
+    .pricing-header h2 {
+      font-size: 17px; font-weight: 800; color: var(--text);
       margin-bottom: 4px;
     }
 
-    .credits-value {
-      font-size: 42px;
-      font-weight: 800;
-      color: #2563EB;
-      margin: 4px 0;
-      line-height: 1;
+    .pricing-header p {
+      font-size: 11px; color: var(--text-muted);
     }
 
-    .credits-card.low-credits .credits-value {
-      color: #D97706;
+    .phone-input-group {
+      display: flex; gap: 8px; margin-bottom: 14px;
     }
 
-    /* ── Low Credit Warning ── */
-    .low-credits-warning {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 14px;
-      background: #FFFBEB;
-      border: 1px solid #F59E0B;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      font-size: 12px;
-      color: #92400E;
-      line-height: 1.4;
+    .phone-prefix {
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: 13px; font-weight: 600;
+      font-family: inherit;
     }
 
-    .low-credits-warning.hidden {
-      display: none;
+    .phone-input {
+      flex: 1; padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 13px; font-family: inherit;
+      outline: none; transition: var(--transition);
     }
 
-    /* ── Promo Section ── */
-    .promo-section {
-      display: flex;
-      gap: 8px;
-      margin-top: 14px;
-    }
+    .phone-input:focus { border-color: var(--primary); }
+    .phone-input::placeholder { color: var(--text-muted); }
 
-    .promo-input {
-      flex: 1;
-      padding: 9px 12px;
-      background: #fff;
-      border: 1px solid #CBD5E1;
-      border-radius: 8px;
-      color: #0F172A;
-      font-size: 13px;
-      font-family: 'Inter', sans-serif;
-      outline: none;
-      transition: border-color 0.15s ease;
-    }
-
-    .promo-input:focus {
-      border-color: #2563EB;
-    }
-
-    .promo-input::placeholder {
-      color: #94A3B8;
-    }
-
-    .promo-btn {
-      padding: 9px 16px;
-      background: #2563EB;
-      border: none;
-      border-radius: 8px;
-      color: #fff;
-      cursor: pointer;
-      font-weight: 500;
-      font-size: 13px;
-      font-family: 'Inter', sans-serif;
-      transition: background 0.15s ease;
-    }
-
-    .promo-btn:hover {
-      background: #1D4ED8;
-    }
-
-    /* ── Plans ── */
-    .plans-header {
-      font-size: 11px;
-      color: #64748B;
-      margin-bottom: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .plan-btn {
-      width: 100%;
-      padding: 13px 16px;
+    /* Plan cards */
+    .plan-card {
+      width: 100%; padding: 12px 14px;
       margin-bottom: 8px;
-      background: #fff;
-      border: 1px solid #E2E8F0;
-      border-radius: 10px;
-      color: #0F172A;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      transition: border-color 0.15s ease, background 0.15s ease;
+      display: flex; justify-content: space-between; align-items: center;
+      transition: var(--transition);
       position: relative;
     }
 
-    .plan-btn:hover {
-      border-color: #2563EB;
-      background: #EFF6FF;
+    .plan-card:hover {
+      border-color: var(--primary);
+      background: rgba(124, 58, 237, 0.06);
     }
 
-    .plan-btn.featured {
-      border-color: #7C3AED;
-      background: #F5F3FF;
+    .plan-card.best-value {
+      border-color: var(--accent);
+      background: rgba(16, 185, 129, 0.06);
     }
 
-    .plan-btn.featured:hover {
-      border-color: #6D28D9;
-      background: #EDE9FE;
+    .plan-card.best-value:hover {
+      border-color: var(--accent-hover);
+      background: rgba(16, 185, 129, 0.1);
     }
 
-    .plan-btn.pro-plan {
-      border-color: #10B981;
-      background: #F0FDF4;
-    }
-
-    .plan-btn.pro-plan:hover {
-      border-color: #059669;
-      background: #ECFDF5;
-    }
-
-    .badge {
-      position: absolute;
-      top: -1px;
-      right: 12px;
-      font-size: 9px;
-      font-weight: 700;
-      padding: 3px 8px;
+    .plan-badge {
+      position: absolute; top: -1px; right: 12px;
+      font-size: 8px; font-weight: 700;
+      padding: 2px 8px 3px;
       border-radius: 0 0 6px 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #fff;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      color: #fff; background: var(--accent);
     }
 
-    .badge-popular {
-      background: #7C3AED;
-    }
-
-    .badge-power {
-      background: #10B981;
-    }
-
-    .plan-info {
-      flex: 1;
-      padding-left: 8px;
-      text-align: left;
-    }
+    .plan-left { flex: 1; }
 
     .plan-name {
-      font-weight: 600;
-      font-size: 14px;
-      margin-bottom: 3px;
-      color: #0F172A;
+      font-weight: 600; font-size: 13px;
+      color: var(--text); margin-bottom: 2px;
     }
 
-    .plan-credits {
-      font-size: 11px;
-      color: #64748B;
-      font-weight: 400;
+    .plan-duration {
+      font-size: 10px; color: var(--text-muted); font-weight: 400;
     }
 
-    .plan-price-box {
-      text-align: right;
-    }
+    .plan-price-box { text-align: right; }
 
     .plan-price {
-      color: #10B981;
-      font-weight: 700;
-      font-size: 18px;
-      line-height: 1;
-      margin-bottom: 2px;
+      font-size: 18px; font-weight: 800;
+      color: var(--primary); line-height: 1;
     }
 
-    .plan-btn.featured .plan-price {
-      color: #7C3AED;
-    }
+    .plan-card.best-value .plan-price { color: var(--accent); }
 
     .plan-per {
-      font-size: 10px;
-      color: #94A3B8;
-      font-weight: 500;
-      text-transform: uppercase;
+      font-size: 9px; color: var(--text-muted);
+      font-weight: 500; text-transform: uppercase;
+    }
+
+    .upi-badge {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; margin-top: 12px;
+      font-size: 11px; color: var(--text-muted);
+    }
+
+    .upi-badge svg { width: 16px; height: 16px; }
+
+    /* ── Logout ── */
+    .btn-logout {
+      width: 100%; padding: 10px;
+      margin-top: 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 12px; font-weight: 500;
+      font-family: inherit; cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-logout:hover {
+      border-color: var(--danger);
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.06);
     }
 
     /* ── Footer ── */
     .footer {
-      padding: 12px 24px;
-      border-top: 1px solid #E2E8F0;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
       text-align: center;
-      background: #fff;
+      background: var(--surface);
+    }
+
+    .footer span {
+      font-size: 10px; color: var(--text-muted);
     }
 
     .footer a {
-      color: #2563EB;
-      text-decoration: none;
-      font-size: 11px;
-      margin: 0 6px;
-      font-weight: 500;
+      color: var(--primary); text-decoration: none;
+      font-size: 10px; font-weight: 500;
+      margin: 0 4px;
     }
 
-    .hidden {
-      display: none;
-    }
+    .footer a:hover { text-decoration: underline; }
 
     /* ── Toasts ── */
     .message {
-      position: fixed;
-      top: 10px;
-      left: 50%;
+      position: fixed; top: 10px; left: 50%;
       transform: translateX(-50%);
       padding: 10px 18px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      font-family: 'Inter', sans-serif;
-      z-index: 1000;
-      max-width: 340px;
-      text-align: center;
+      border-radius: var(--radius-sm);
+      font-size: 12px; font-weight: 500;
+      font-family: inherit;
+      z-index: 1000; max-width: 340px; text-align: center;
     }
 
     .message.success {
-      background: #ECFDF5;
-      border: 1px solid #10B981;
-      color: #065F46;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--accent);
+      color: var(--accent);
     }
 
     .message.error {
-      background: #FEF2F2;
-      border: 1px solid #EF4444;
-      color: #991B1B;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
     }
 
     .message.info {
-      background: #EFF6FF;
-      border: 1px solid #2563EB;
-      color: #1E40AF;
+      background: rgba(124, 58, 237, 0.15);
+      border: 1px solid var(--primary);
+      color: #c4b5fd;
     }
 
     .message.warning {
-      background: #FFFBEB;
-      border: 1px solid #F59E0B;
-      color: #92400E;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid var(--warning);
+      color: #fcd34d;
     }
 
-    /* ── Icon system ── */
-    .icon {
-      width: 20px;
-      height: 20px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: #64748B;
-      flex-shrink: 0;
-    }
-
-    .icon svg {
-      width: 20px;
-      height: 20px;
-      stroke: currentColor;
-      stroke-width: 1.75;
-      fill: none;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .icon-primary {
-      color: #2563EB;
-    }
-
-    .icon-accent {
-      color: #10B981;
-    }
-
-    .icon-muted {
-      color: #94A3B8;
+    /* ── Button spinner ── */
+    .btn-google .btn-spinner {
+      width: 16px; height: 16px;
+      border: 2px solid #d1d5db;
+      border-top-color: #1f2937;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
     }
   </style>
 </head>
 
 <body>
   <div id="app">
-    <!-- Header -->
+    <!-- ═══ Header ═══ -->
     <div class="header">
-      <div class="header-icon">
-        <!-- Lucide: Zap --><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563EB"
-          stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <div class="header-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
       </div>
-      <h1>AI Shipping Optimizer</h1>
-      <p>Optimize delivery pricing with smart AI cost insights</p>
-      <p class="powered-label">Powered by Ultra-Fast AI</p>
-    </div>
-    <div class="content">
-      <!-- ── Auth Section ── -->
-      <div id="auth-section" class="glass-card">
-        <div class="welcome-text">
-          <h2>Welcome ! 👋</h2>
-          <p>Sign in to start optimizing your Meesho products and saving on shipping.</p>
-        </div><button class="btn btn-google" id="google-login-btn"><svg width="18" height="18" viewBox="0 0 18 18">
-            <path fill="#4285F4"
-              d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" />
-            <path fill="#34A853"
-              d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" />
-            <path fill="#FBBC05"
-              d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" />
-            <path fill="#EA4335"
-              d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" />
-          </svg>Continue with Google </button>
-        <div class="signup-bonus"><span>🎁</span>
-          <div>Get <strong id="signup-bonus-text">15 FREE credits</strong>on signup<br>+<strong id="daily-bonus-text">+2
-              credits every 24h</strong>daily login bonus </div>
-        </div>
+      <div class="header-info">
+        <h1>AI Listing Pro</h1>
+        <p>AI-powered Meesho seller toolkit</p>
       </div>
-      <!-- ── User Section ── -->
+      <span class="header-badge" id="header-badge">v2.0</span>
+    </div>
+
+    <div class="content">
+
+      <!-- ═══ STATE 1: Loading ═══ -->
+      <div id="loading-state" class="loading-state">
+        <div class="spinner"></div>
+        <p>Checking user subscription...</p>
+      </div>
+
+      <!-- ═══ STATE 2: Signed Out ═══ -->
+      <div id="auth-section" class="auth-card hidden">
+        <div class="auth-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+        </div>
+        <h2>Grow Your Meesho Sales</h2>
+        <p class="tagline">Optimize your Meesho business with AI&#8209;powered listing and shipping tools.</p>
+
+        <div class="features-grid">
+          <div class="feature-pill"><span class="feat-icon">🚚</span>AI Shipping Optimizer</div>
+          <div class="feature-pill"><span class="feat-icon">📝</span>AI Listing Generator</div>
+          <div class="feature-pill"><span class="feat-icon">✏️</span>AI Title Generator</div>
+          <div class="feature-pill"><span class="feat-icon">🖼️</span>AI Image Optimizer</div>
+          <div class="feature-pill"><span class="feat-icon">💰</span>Profit Calculator</div>
+          <div class="feature-pill"><span class="feat-icon">🔑</span>Keyword Generator</div>
+        </div>
+
+        <button class="btn-google" id="google-login-btn">
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+            <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z"/>
+            <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <p class="auth-footer">
+          By signing in you agree to our Terms of Service &amp; Privacy Policy
+        </p>
+      </div>
+
+      <!-- ═══ STATE 3: Subscribed ═══ -->
       <div id="user-section" class="hidden">
-        <!-- Profile Card -->
-        <div class="glass-card">
-          <div class="user-info">
+        <!-- User + Subscription Info -->
+        <div class="sub-card">
+          <div class="user-row">
             <div class="user-avatar" id="user-avatar">U</div>
-            <div class="user-details">
+            <div class="user-meta">
               <div class="user-name" id="user-name">User</div>
               <div class="user-email" id="user-email">user@email.com</div>
             </div>
           </div>
-        </div>
-        <!-- Credits Card -->
-        <div class="credits-card" id="credits-card">
-          <div class="credits-icon">
-            <!-- Lucide: Zap --><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563EB"
-              stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
+          <div class="sub-status-bar">
+            <div class="sub-status-row">
+              <span class="sub-label">Subscription</span>
+              <span class="sub-value active" id="sub-plan-name">Active</span>
+            </div>
+            <div class="sub-status-row">
+              <span class="sub-label">Expires</span>
+              <span class="sub-value" id="sub-expiry">—</span>
+            </div>
+            <div class="sub-status-row">
+              <span class="sub-label">Remaining</span>
+              <span class="sub-value" id="sub-remaining">—</span>
+            </div>
           </div>
-          <div class="credits-label">Credits Left</div>
-          <div class="credits-value" id="credits-value">0</div>
         </div>
-        <!-- Low Credits Warning -->
-        <div class="low-credits-warning hidden" id="low-credits-warning"><span>⚠️</span><span>Running low.
-            Upgrade to continue optimizing without interruption.</span></div>
-        <!-- Open Meesho --><button class="btn btn-success" id="open-meesho"><svg width="15" height="15"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
-            stroke-linejoin="round">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-          </svg>Open Meesho Dashboard </button>
-        <!-- Promo Code -->
-        <div class="promo-section"><input type="text" class="promo-input" id="promo-code"
-            placeholder="Enter promo code"><button class="promo-btn" id="apply-promo">Apply</button></div>
-        <!-- Upgrade Plans -->
-        <div class="divider"><span>Upgrade Credits</span></div>
-        <div id="plans-container">
-          <!-- Starter Plan --><button class="plan-btn" data-plan="starter">
-            <div class="plan-info">
-              <div class="plan-name" id="plan-starter-name">Starter</div>
-              <div class="plan-credits" id="plan-starter-credits">50 Credits (+25 Bonus on 1st Buy)
-              </div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price" id="plan-starter-price">₹79</div>
-              <div class="plan-per">One-time</div>
-            </div>
-          </button>
-          <!-- Growth Plan (Most Popular) --><button class="plan-btn featured" data-plan="growth">
-            <div class="badge badge-popular">Most Popular</div>
-            <div class="plan-info">
-              <div class="plan-name" id="plan-growth-name">Growth</div>
-              <div class="plan-credits" id="plan-growth-credits">200 Credits</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price" id="plan-growth-price">₹149</div>
-              <div class="plan-per">One-time</div>
-            </div>
-          </button>
-          <!-- Pro Monthly --><button class="plan-btn pro-plan" data-plan="pro">
-            <div class="badge badge-power">Power Sellers</div>
-            <div class="plan-info">
-              <div class="plan-name" id="plan-pro-name">Pro Monthly</div>
-              <div class="plan-credits" id="plan-pro-credits">500 Credits/month</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price" id="plan-pro-price">₹249/mo</div>
-              <div class="plan-per">Auto-renew</div>
-            </div>
-          </button>
+
+        <!-- Open Dashboard -->
+        <button class="btn-dashboard" id="open-dashboard-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+          </svg>
+          Open AI Dashboard
+        </button>
+
+        <!-- Quick AI Tools -->
+        <div class="tools-label">Quick AI Tools</div>
+        <div class="tools-grid">
+          <div class="tool-card" data-tool="shipping">
+            <div class="tool-icon purple">🚚</div>
+            <span class="tool-name">Shipping Optimizer</span>
+          </div>
+          <div class="tool-card" data-tool="listing">
+            <div class="tool-icon green">📝</div>
+            <span class="tool-name">Listing Generator</span>
+          </div>
+          <div class="tool-card" data-tool="image">
+            <div class="tool-icon blue">🖼️</div>
+            <span class="tool-name">Image Optimizer</span>
+          </div>
+          <div class="tool-card" data-tool="profit">
+            <div class="tool-icon orange">💰</div>
+            <span class="tool-name">Profit Calculator</span>
+          </div>
+          <div class="tool-card" data-tool="keywords">
+            <div class="tool-icon pink">🔑</div>
+            <span class="tool-name">Keyword Generator</span>
+          </div>
         </div>
-        <!-- Logout --><button class="btn btn-outline" id="logout-btn">Logout</button>
+
+        <!-- Logout -->
+        <button class="btn-logout" id="logout-btn">Sign Out</button>
       </div>
+
+      <!-- ═══ STATE 4: Not Subscribed (Pricing) ═══ -->
+      <div id="pricing-section" class="hidden">
+        <div class="sub-card" style="margin-bottom:14px">
+          <div class="user-row" style="margin-bottom:0">
+            <div class="user-avatar" id="pricing-avatar">U</div>
+            <div class="user-meta">
+              <div class="user-name" id="pricing-user-name">User</div>
+              <div class="user-email" id="pricing-user-email">user@email.com</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pricing-header">
+          <h2>Choose Your Plan</h2>
+          <p>Unlock all AI tools with a subscription</p>
+        </div>
+
+        <!-- Phone Input -->
+        <div class="phone-input-group">
+          <span class="phone-prefix">+91</span>
+          <input type="tel" class="phone-input" id="phone-input"
+            placeholder="Enter phone number" maxlength="10"
+            pattern="[0-9]{10}" inputmode="numeric">
+        </div>
+
+        <!-- Plans -->
+        <div id="plans-container">
+          <button class="plan-card" data-plan="trial">
+            <div class="plan-left">
+              <div class="plan-name">Trial</div>
+              <div class="plan-duration">10 Days Access</div>
+            </div>
+            <div class="plan-price-box">
+              <div class="plan-price">₹79</div>
+              <div class="plan-per">10 days</div>
+            </div>
+          </button>
+
+          <button class="plan-card" data-plan="monthly">
+            <div class="plan-left">
+              <div class="plan-name">Monthly</div>
+              <div class="plan-duration">30 Days Access</div>
+            </div>
+            <div class="plan-price-box">
+              <div class="plan-price">₹299</div>
+              <div class="plan-per">per month</div>
+            </div>
+          </button>
+
+          <button class="plan-card" data-plan="quarterly">
+            <div class="plan-left">
+              <div class="plan-name">3 Months</div>
+              <div class="plan-duration">90 Days Access</div>
+            </div>
+            <div class="plan-price-box">
+              <div class="plan-price">₹899</div>
+              <div class="plan-per">3 months</div>
+            </div>
+          </button>
+
+          <button class="plan-card" data-plan="half_yearly">
+            <div class="plan-left">
+              <div class="plan-name">6 Months</div>
+              <div class="plan-duration">180 Days Access</div>
+            </div>
+            <div class="plan-price-box">
+              <div class="plan-price">₹1499</div>
+              <div class="plan-per">6 months</div>
+            </div>
+          </button>
+
+          <button class="plan-card best-value" data-plan="yearly">
+            <div class="plan-badge">Best Value</div>
+            <div class="plan-left">
+              <div class="plan-name">Yearly</div>
+              <div class="plan-duration">365 Days Access</div>
+            </div>
+            <div class="plan-price-box">
+              <div class="plan-price">₹2099</div>
+              <div class="plan-per">per year</div>
+            </div>
+          </button>
+        </div>
+
+        <div class="upi-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+          </svg>
+          Secure UPI Payment via Razorpay
+        </div>
+
+        <!-- Logout -->
+        <button class="btn-logout" id="pricing-logout-btn">Sign Out</button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>AI Listing Pro v2.0 · </span>
+      <a href="https://meesho-ai-tool.vercel.app/support" target="_blank">Support</a>
+      <span>·</span>
+      <a href="https://meesho-ai-tool.vercel.app/pricing" target="_blank">Pricing</a>
     </div>
   </div>
 
-  <!-- Load order: config first, then supabase client, then managers, then popup logic -->
+  <!-- Scripts -->
   <script src="config.js"></script>
   <script src="supabase.js"></script>
   <script src="supabaseClient.js"></script>

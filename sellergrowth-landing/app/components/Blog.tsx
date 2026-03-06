@@ -51,10 +51,10 @@ export default function Blog() {
           {blogPosts.map((post, i) => (
             <article
               key={i}
-              className="group bg-white rounded-2xl overflow-hidden border border-border hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300"
+              className="group bg-surface-2 rounded-2xl overflow-hidden border border-border hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300"
             >
               {/* Image */}
-              <div className="relative h-48 overflow-hidden bg-gray-100">
+              <div className="relative h-48 overflow-hidden bg-surface">
                 <img
                   src={post.image}
                   alt={post.title}

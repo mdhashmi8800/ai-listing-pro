@@ -25,14 +25,14 @@ export default function About() {
           </div>
 
           {/* Developer card */}
-          <div className="mt-12 inline-flex items-center gap-4 bg-surface border border-border rounded-2xl px-8 py-6">
+          <div className="mt-12 inline-flex items-center gap-4 bg-surface-2 border border-border rounded-2xl px-8 py-6">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
               MH
             </div>
             <div className="text-left">
               <p className="font-semibold text-lg">MD Hashmi</p>
               <p className="text-muted text-sm">
-                Developer &amp; Creator of SellerGrowth
+                Developer &amp; Creator of AI Listing Pro
               </p>
             </div>
           </div>

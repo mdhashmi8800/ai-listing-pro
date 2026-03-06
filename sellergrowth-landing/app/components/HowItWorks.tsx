@@ -3,7 +3,7 @@ const steps = [
     step: "01",
     title: "Install Extension",
     description:
-      "Add the SellerGrowth Chrome extension to your browser in one click from the Chrome Web Store.",
+      "Add the AI Listing Pro Chrome extension to your browser in one click from the Chrome Web Store.",
     icon: (
       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -12,9 +12,9 @@ const steps = [
   },
   {
     step: "02",
-    title: "Login with Google",
+    title: "Login & Subscribe",
     description:
-      "Sign in securely with your Google account — no separate registration needed.",
+      "Sign in with Google and choose a plan that fits your selling goals. Start with just ₹79.",
     icon: (
       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -23,9 +23,9 @@ const steps = [
   },
   {
     step: "03",
-    title: "Optimize Listings",
+    title: "Optimize & Grow",
     description:
-      "Let AI analyze and optimize your Meesho product listings for better visibility and sales.",
+      "Let AI optimize your product listings, shipping, titles, and keywords — watch your sales grow.",
     icon: (
       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -62,10 +62,10 @@ export default function HowItWorks() {
               <div className="relative mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white shadow-lg shadow-primary/25 mb-6">
                 {s.icon}
               </div>
-              <span className="inline-block text-xs font-bold text-primary bg-primary-light px-3 py-1 rounded-full mb-3">
+              <span className="inline-block text-xs font-bold text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-full mb-3">
                 Step {s.step}
               </span>
-              <h3 className="text-xl font-semibold mb-2">{s.title}</h3>
+              <h3 className="text-xl font-semibold mb-2 text-foreground">{s.title}</h3>
               <p className="text-muted text-sm leading-relaxed max-w-xs mx-auto">
                 {s.description}
               </p>

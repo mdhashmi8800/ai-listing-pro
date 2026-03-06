@@ -1,12 +1,13 @@
 export default function Footer() {
   return (
-    <footer className="border-t border-border bg-white">
+    <footer className="border-t border-border bg-surface">
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-8">
           {/* Brand */}
           <div className="text-center md:text-left">
-            <span className="text-xl font-bold text-primary tracking-tight">
-              Seller<span className="text-foreground">Growth</span>
+            <span className="text-xl font-bold tracking-tight">
+              <span className="text-primary">AI Listing</span>{" "}
+              <span className="text-foreground">Pro</span>
             </span>
             <p className="text-sm text-muted mt-1">
               AI-powered tools for Meesho sellers.
@@ -44,7 +45,7 @@ export default function Footer() {
 
         {/* Bottom */}
         <div className="mt-8 pt-8 border-t border-border text-center text-xs text-muted">
-          &copy; {new Date().getFullYear()} SellerGrowth. All rights reserved.
+          &copy; {new Date().getFullYear()} AI Listing Pro. All rights reserved.
           Built by MD Hashmi.
         </div>
       </div>

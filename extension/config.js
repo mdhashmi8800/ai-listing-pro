@@ -31,8 +31,6 @@ const CONFIG = {
 
     // ── Credits ────────────────────────────────────────────────
     DEFAULT_SIGNUP_CREDITS: 15,          // Free credits every new user gets on signup
-    DAILY_LOGIN_BONUS: 2,                // +2 credits every 24h login bonus
-    DAILY_LOGIN_BONUS_HOURS: 24,         // Bonus cooldown in hours
     CREDITS_PER_OPTIMIZATION: 1,         // Credits per AI Optimizer run
     CREDIT_COST_AI_RUN: 1,              // Credits per AI Optimizer run (alias)
     CREDIT_COST_SHIPPING: 0,            // Shipping check is always free
@@ -40,11 +38,6 @@ const CONFIG = {
 
     // ── Abuse Protection ────────────────────────────────────────
     MAX_RUNS_PER_HOUR: 50,              // Max optimization runs per hour per user
-
-    // ── Feature Flags ───────────────────────────────────────────
-    FEATURE_DAILY_BONUS: true,
-    FEATURE_FIRST_PURCHASE_BONUS: true,
-    FIRST_PURCHASE_BONUS_CREDITS: 25,   // Bonus credits on first-ever purchase
 
     // ── Plans ──────────────────────────────────────────────────
     PLANS: {
@@ -62,14 +55,12 @@ const CONFIG = {
             name: 'Starter',
             price: 79,
             credits: 50,
-            bonus: 25,              // 25 bonus credits on FIRST purchase only
             oneTime: true,
             popular: false,
             badge: null,
             tagline: 'Great for beginners',
             features: [
                 '50 Credits',
-                '+25 Bonus on First Buy',
                 'One-time payment',
                 'Shipping Check Free',
             ],
@@ -79,7 +70,6 @@ const CONFIG = {
             name: 'Growth',
             price: 149,
             credits: 200,
-            bonus: 0,
             oneTime: true,
             popular: true,
             badge: 'Most Popular',
@@ -96,7 +86,6 @@ const CONFIG = {
             name: 'Pro Monthly',
             price: 249,
             credits: 500,
-            bonus: 0,
             oneTime: false,
             popular: false,
             badge: 'Best for Power Sellers',
@@ -107,6 +96,46 @@ const CONFIG = {
                 'Auto-renewal subscription',
                 'Priority Support',
             ],
+        },
+    },
+
+    // ── Subscription Plans (shown in pricing section) ──────────
+    SUBSCRIPTION_PLANS: {
+        trial: {
+            id: 'trial',
+            name: 'Trial',
+            price: 79,
+            duration_days: 10,
+            label: '10 Days Access',
+        },
+        monthly: {
+            id: 'monthly',
+            name: 'Monthly',
+            price: 299,
+            duration_days: 30,
+            label: '30 Days Access',
+        },
+        quarterly: {
+            id: 'quarterly',
+            name: '3 Months',
+            price: 899,
+            duration_days: 90,
+            label: '90 Days Access',
+        },
+        half_yearly: {
+            id: 'half_yearly',
+            name: '6 Months',
+            price: 1499,
+            duration_days: 180,
+            label: '180 Days Access',
+        },
+        yearly: {
+            id: 'yearly',
+            name: 'Yearly',
+            price: 2099,
+            duration_days: 365,
+            label: '365 Days Access',
+            badge: 'Best Value',
         },
     },
 

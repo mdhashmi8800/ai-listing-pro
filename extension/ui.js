@@ -183,9 +183,6 @@ const UI = {
                 ? `<div class="plan-badge ${plan.popular ? 'badge-popular' : 'badge-power'}">${plan.badge}</div>`
                 : '';
             const priceLabel = plan.oneTime ? 'One-time' : '/month · Auto-renew';
-            const bonusLine = plan.bonus > 0
-                ? `<div class="feature-item bonus-line">${checkSvg}<span>+${plan.bonus} Bonus Credits on 1st Buy 🎉</span></div>`
-                : '';
             return `
                 <div class="pricing-card-modern ${plan.popular ? 'featured' : ''} ${extraClass}">
                     ${badgeHTML}
@@ -201,7 +198,6 @@ const UI = {
                     </div>
                     <div class="card-features">
                         ${plan.features.map(f => `<div class="feature-item">${checkSvg}<span>${f}</span></div>`).join('')}
-                        ${bonusLine}
                     </div>
                     <button class="card-btn ${plan.popular ? 'featured-btn' : 'standard-btn'} buy-btn" data-plan="${plan.id}">
                         ${plan.popular ? 'Get Growth Plan' : plan.oneTime ? 'Get Started' : 'Subscribe Pro'}
@@ -230,7 +226,7 @@ const UI = {
                 <!-- Free plan reminder -->
                 <div class="free-plan-reminder">
                     <span>🎁</span>
-                    <span>Free plan: <strong>${CONFIG.DEFAULT_SIGNUP_CREDITS} credits on signup</strong> + <strong>+${CONFIG.DAILY_LOGIN_BONUS} daily login bonus</strong></span>
+                    <span>Free plan: <strong>${CONFIG.DEFAULT_SIGNUP_CREDITS} credits on signup</strong></span>
                 </div>
 
                 <div class="pricing-grid">

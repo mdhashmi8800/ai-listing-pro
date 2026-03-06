@@ -70,10 +70,6 @@ const SettingsManager = {
         if (s.signup_credits)
             CONFIG.DEFAULT_SIGNUP_CREDITS = parseInt(s.signup_credits, 10) || 15;
 
-        // Daily login bonus
-        if (s.daily_login_bonus)
-            CONFIG.DAILY_LOGIN_BONUS = parseInt(s.daily_login_bonus, 10) || 2;
-
         // Low credits warning threshold
         if (s.low_credits_threshold)
             CONFIG.LOW_CREDITS_THRESHOLD = parseInt(s.low_credits_threshold, 10) || 5;

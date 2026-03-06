@@ -8,59 +8,95 @@ declare global {
 
 const plans = [
   {
-    name: "Starter",
+    name: "Trial",
     price: "₹79",
     amount: 79,
-    period: "ONE-TIME",
-    description: "50 Credits (+25 Bonus on 1st Buy)",
+    period: "10 DAYS",
+    description: "Try all AI tools for 10 days.",
     features: [
-      "50 optimization credits",
-      "25 bonus credits on first purchase",
+      "All 6 AI tools included",
+      "10 days full access",
       "Google login",
-      "Basic listing analysis",
+      "Shipping optimizer",
       "Community support",
     ],
-    cta: "Buy Starter",
+    cta: "Start Trial",
     highlighted: false,
     badge: null,
     badgeColor: "",
   },
   {
-    name: "Growth",
-    price: "₹149",
-    amount: 149,
-    period: "ONE-TIME",
-    description: "200 Credits — best value for growing sellers.",
+    name: "Monthly",
+    price: "₹299",
+    amount: 299,
+    period: "/month",
+    description: "Full access for active sellers.",
     features: [
-      "200 optimization credits",
-      "Smart listing optimization",
-      "Workflow automation",
-      "Cloud sync across devices",
+      "All AI tools unlocked",
+      "30 days access",
+      "Listing & title generator",
+      "Image optimizer",
       "Priority support",
     ],
-    cta: "Buy Growth",
+    cta: "Subscribe Monthly",
     highlighted: true,
-    badge: "MOST POPULAR",
-    badgeColor: "from-primary to-accent",
+    badge: "POPULAR",
+    badgeColor: "from-primary to-purple-400",
   },
   {
-    name: "Pro Monthly",
-    price: "₹249",
-    amount: 249,
-    period: "/mo · AUTO-RENEW",
-    description: "500 Credits/month — for power sellers.",
+    name: "3 Months",
+    price: "₹899",
+    amount: 899,
+    period: "/ 3 MONTHS",
+    description: "Save ₹98 vs monthly billing.",
     features: [
-      "500 credits every month",
-      "Unlimited listing optimization",
-      "Advanced analytics & bulk editing",
+      "All AI tools unlocked",
+      "90 days access",
+      "Profit calculator",
+      "Keyword generator",
       "Priority support",
-      "Cloud sync across devices",
-      "Auto-renewal for uninterrupted access",
     ],
-    cta: "Subscribe Pro",
+    cta: "Get 3 Months",
     highlighted: false,
-    badge: "POWER SELLERS",
-    badgeColor: "from-emerald-500 to-emerald-600",
+    badge: null,
+    badgeColor: "",
+  },
+  {
+    name: "6 Months",
+    price: "₹1499",
+    amount: 1499,
+    period: "/ 6 MONTHS",
+    description: "Save ₹295 vs monthly billing.",
+    features: [
+      "All AI tools unlocked",
+      "180 days access",
+      "All optimization features",
+      "Dedicated support",
+      "Early access to new tools",
+    ],
+    cta: "Get 6 Months",
+    highlighted: false,
+    badge: null,
+    badgeColor: "",
+  },
+  {
+    name: "Yearly",
+    price: "₹2099",
+    amount: 2099,
+    period: "/ YEAR",
+    description: "Best value — save ₹1489 per year.",
+    features: [
+      "All AI tools unlocked",
+      "365 days access",
+      "All optimization features",
+      "VIP priority support",
+      "Early access to new tools",
+      "Exclusive seller insights",
+    ],
+    cta: "Get Best Value",
+    highlighted: false,
+    badge: "BEST VALUE",
+    badgeColor: "from-accent to-emerald-400",
   },
 ];
 
@@ -87,8 +123,8 @@ export default function Pricing() {
         name: "AI Listing Pro",
         description: plan,
         order_id: order.id,
-        handler: async function (response: any) {
-          alert("Payment Successful!");
+        handler: async function () {
+          alert("Payment Successful! Your subscription is now active.");
           window.location.reload();
         },
       };
@@ -107,27 +143,28 @@ export default function Pricing() {
         {/* Section header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
           <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3">
-            Upgrade Credits
+            Pricing Plans
           </p>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
             Simple, transparent pricing
           </h2>
           <p className="mt-4 text-muted text-lg">
-            Pick a plan that fits your selling goals. No hidden fees.
+            Pick a subscription that fits your selling goals. No hidden fees. UPI
+            payment via Razorpay.
           </p>
         </div>
 
-        {/* Cards */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        {/* Cards — responsive grid */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
           {plans.map((plan, i) => (
             <div
               key={i}
-              className={`relative rounded-2xl p-8 border transition-all ${
+              className={`relative rounded-2xl p-7 border transition-all duration-300 hover:-translate-y-1 ${
                 plan.highlighted
-                  ? "bg-white border-primary shadow-xl shadow-primary/10 scale-[1.02]"
+                  ? "bg-surface-2 border-primary shadow-xl shadow-primary/15 scale-[1.02]"
                   : plan.badge
-                  ? "bg-white border-emerald-400 hover:shadow-lg"
-                  : "bg-white border-border hover:border-primary/20 hover:shadow-lg"
+                  ? "bg-surface-2 border-accent/40 hover:shadow-lg hover:shadow-accent/10"
+                  : "bg-surface-2 border-border hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10"
               }`}
             >
               {plan.badge && (
@@ -137,21 +174,19 @@ export default function Pricing() {
                   {plan.badge}
                 </div>
               )}
-              <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
-              <p className="text-muted text-sm mb-6">{plan.description}</p>
-              <div className="flex items-baseline gap-1 mb-8">
-                <span className="text-4xl font-extrabold">{plan.price}</span>
+              <h3 className="text-lg font-bold mb-1 text-foreground">{plan.name}</h3>
+              <p className="text-muted text-xs mb-5">{plan.description}</p>
+              <div className="flex items-baseline gap-1 mb-6">
+                <span className="text-3xl font-extrabold text-foreground">{plan.price}</span>
                 <span className="text-muted text-xs uppercase">{plan.period}</span>
               </div>
-              <ul className="space-y-3 mb-8">
+              <ul className="space-y-2.5 mb-6">
                 {plan.features.map((f, j) => (
-                  <li key={j} className="flex items-start gap-3 text-sm">
+                  <li key={j} className="flex items-start gap-2 text-sm text-muted">
                     <svg
-                      className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                      className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
                         plan.highlighted
                           ? "text-primary"
-                          : plan.badge
-                          ? "text-emerald-500"
                           : "text-accent"
                       }`}
                       fill="none"
@@ -170,31 +205,27 @@ export default function Pricing() {
                 ))}
               </ul>
               <button
-                onClick={() => {
-                  if (plan.name === "Starter") {
-                    startPayment(79, "Starter");
-                    return;
-                  }
-
-                  if (plan.name === "Growth") {
-                    startPayment(149, "Growth");
-                    return;
-                  }
-
-                  startPayment(249, "Pro Monthly");
-                }}
-                className={`w-full py-3 rounded-full font-semibold text-sm transition-all ${
+                onClick={() => startPayment(plan.amount, plan.name)}
+                className={`w-full py-3 rounded-full font-semibold text-sm transition-all cursor-pointer ${
                   plan.highlighted
                     ? "bg-primary text-white hover:bg-primary-dark shadow-lg shadow-primary/25"
                     : plan.badge
-                    ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25"
-                    : "bg-surface text-foreground border border-border hover:bg-primary-light hover:border-primary/30"
+                    ? "bg-accent text-white hover:bg-accent-dark shadow-lg shadow-accent/25"
+                    : "bg-surface text-foreground border border-border hover:border-primary/30 hover:bg-primary/5"
                 }`}
               >
                 {plan.cta}
               </button>
             </div>
           ))}
+        </div>
+
+        {/* UPI badge */}
+        <div className="text-center mt-12 flex items-center justify-center gap-2 text-muted text-sm">
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+          </svg>
+          Secure UPI Payment via Razorpay
         </div>
       </div>
     </section>

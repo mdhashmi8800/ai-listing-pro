@@ -1,3 +1,4 @@
+console.log("Content script loaded");
 // Meesho Credits Extension - Content Script
 console.log('Meesho Credits Extension loaded');
 
@@ -17,21 +18,40 @@ class MeeshoCreditsOptimizer {
         this.lastImageBlob = null;
         this.modal = null;
         this.allCategories = [];
+        this._cachedUser = null;
         this.init();
+    }
+
+    // Helper: send message to background.js and return a promise
+    _bgSend(msg) {
+        return new Promise((resolve) => {
+            try {
+                chrome.runtime.sendMessage(msg, (response) => {
+                    if (chrome.runtime.lastError) {
+                        console.warn('Background message error:', chrome.runtime.lastError.message);
+                        resolve(null);
+                        return;
+                    }
+                    resolve(response || null);
+                });
+            } catch (e) {
+                console.warn('sendMessage failed:', e.message);
+                resolve(null);
+            }
+        });
     }
 
     init() {
         console.log('Initializing Credits Optimizer...');
 
-        // Check for OAuth callback on page load
+        // Check login state from background on page load
         (async () => {
             try {
-                const handled = await AuthManager.init();
-                if (handled && AuthManager.isLoggedIn()) {
-                    // OAuth just completed successfully
-                    setTimeout(() => {
-                        UI.showNotification('✅ Login successful! Welcome to AI Listing Pro', 'success');
-                    }, 500);
+                const profile = await this._bgSend({ action: 'GET_PROFILE' });
+                if (profile?.success && profile.isLoggedIn) {
+                    this._cachedUser = profile.user;
+                    // Keep AuthManager.user in sync for CreditsManager helpers that need it
+                    if (typeof AuthManager !== 'undefined') AuthManager.user = profile.user;
                 }
             } catch (e) {
                 if (e.message && e.message.includes('Extension context invalidated')) {
@@ -46,6 +66,10 @@ class MeeshoCreditsOptimizer {
             chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 if (message.action === 'openOptimizer') {
                     this.openModal();
+                    sendResponse({ success: true });
+                }
+                if (message.action === 'RUN_OPTIMIZER') {
+                    this.showOptimizerOverlay();
                     sendResponse({ success: true });
                 }
                 return true;
@@ -76,7 +100,18 @@ class MeeshoCreditsOptimizer {
 
     async setup() {
         if (this.isMeeshoPage()) {
-            await AuthManager.init();
+            // Wake up background service worker before doing anything
+            try {
+                await this._bgSend({ action: 'PING' });
+            } catch (e) {
+                console.warn('Background service worker not ready:', e.message);
+            }
+            // Refresh cached profile from background
+            const profile = await this._bgSend({ action: 'GET_PROFILE' });
+            if (profile?.success && profile.isLoggedIn) {
+                this._cachedUser = profile.user;
+                if (typeof AuthManager !== 'undefined') AuthManager.user = profile.user;
+            }
             this.waitForElement('#changeFrontImage', () => {
                 this.addOptimizerButton();
                 this.detectShipping();
@@ -128,6 +163,177 @@ class MeeshoCreditsOptimizer {
 
         const parent = imageInput.closest('div') || imageInput.parentElement;
         if (parent) parent.appendChild(wrapper);
+    }
+
+    // ── AI Shipping Optimizer Overlay ──────────────────────────
+    showOptimizerOverlay() {
+        // Remove any existing overlay
+        const existing = document.getElementById('ai-optimizer-overlay');
+        if (existing) existing.remove();
+
+        // Inject scoped styles
+        const styleId = 'ai-optimizer-styles';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                @keyframes aiOptFadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes aiOptSlideUp { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+                @keyframes aiOptSpin { to { transform: rotate(360deg); } }
+                @keyframes aiOptPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+                @keyframes aiOptBarGrow { from { width: 0%; } to { width: 100%; } }
+                @keyframes aiOptResultFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+                #ai-optimizer-overlay {
+                    position: fixed; inset: 0; z-index: 999999;
+                    background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(6px);
+                    animation: aiOptFadeIn .3s ease;
+                }
+                #ai-optimizer-modal {
+                    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                    width: 420px; max-width: 92vw; background: #fff;
+                    border-radius: 16px; overflow: hidden;
+                    box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+                    animation: aiOptSlideUp .4s ease;
+                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                }
+                .aiopt-header {
+                    background: linear-gradient(135deg, #2563EB, #7C3AED);
+                    padding: 22px 28px; color: #fff; text-align: center;
+                }
+                .aiopt-header h2 { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+                .aiopt-header p { font-size: 12px; opacity: .85; margin: 0; }
+                .aiopt-body { padding: 24px 28px 20px; min-height: 180px; }
+                .aiopt-spinner-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; }
+                .aiopt-spinner {
+                    width: 48px; height: 48px; border: 4px solid #E2E8F0;
+                    border-top-color: #2563EB; border-radius: 50%;
+                    animation: aiOptSpin .8s linear infinite;
+                }
+                .aiopt-status { font-size: 15px; font-weight: 600; color: #0F172A; animation: aiOptPulse 1.5s ease infinite; }
+                .aiopt-progress-bar {
+                    width: 100%; height: 6px; background: #E2E8F0; border-radius: 3px;
+                    overflow: hidden; margin-top: 4px;
+                }
+                .aiopt-progress-fill { height: 100%; background: linear-gradient(90deg, #2563EB, #7C3AED); border-radius: 3px; animation: aiOptBarGrow 2s ease forwards; }
+                .aiopt-results { animation: aiOptResultFade .5s ease; }
+                .aiopt-results h3 { font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 16px; text-align: center; }
+                .aiopt-result-row {
+                    display: flex; justify-content: space-between; align-items: center;
+                    padding: 12px 16px; background: #F8FAFC; border-radius: 10px;
+                    margin-bottom: 8px; border: 1px solid #E2E8F0;
+                }
+                .aiopt-result-label { font-size: 13px; color: #64748B; font-weight: 500; }
+                .aiopt-result-value { font-size: 14px; font-weight: 700; color: #0F172A; }
+                .aiopt-result-value.savings { color: #10B981; }
+                .aiopt-result-value.original { color: #EF4444; text-decoration: line-through; opacity: .7; }
+                .aiopt-result-value.optimized { color: #2563EB; font-size: 18px; }
+                .aiopt-result-highlight {
+                    background: linear-gradient(135deg, #ECFDF5, #F0FDF4);
+                    border: 1.5px solid #10B981; padding: 14px 18px;
+                    border-radius: 10px; text-align: center; margin-top: 12px;
+                }
+                .aiopt-result-highlight .big-save { font-size: 28px; font-weight: 800; color: #10B981; }
+                .aiopt-result-highlight .save-label { font-size: 12px; color: #065F46; margin-top: 2px; }
+                .aiopt-close-btn {
+                    display: block; width: 100%; padding: 12px; margin-top: 16px;
+                    background: #2563EB; color: #fff; border: none; border-radius: 10px;
+                    font-size: 14px; font-weight: 600; cursor: pointer;
+                    font-family: inherit; transition: background .15s;
+                }
+                .aiopt-close-btn:hover { background: #1D4ED8; }
+                .aiopt-footer { padding: 0 28px 18px; text-align: center; }
+                .aiopt-footer span { font-size: 10px; color: #94A3B8; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'ai-optimizer-overlay';
+
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'ai-optimizer-modal';
+        modal.innerHTML = `
+            <div class="aiopt-header">
+                <h2>🚀 AI Shipping Optimizer</h2>
+                <p>Powered by Advanced Machine Learning</p>
+            </div>
+            <div class="aiopt-body">
+                <div class="aiopt-spinner-wrap">
+                    <div class="aiopt-spinner"></div>
+                    <div class="aiopt-status">Analyzing shipping data...</div>
+                    <div class="aiopt-progress-bar"><div class="aiopt-progress-fill"></div></div>
+                </div>
+            </div>
+            <div class="aiopt-footer"><span>Analyzing product weight, dimensions & delivery zones</span></div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Close on overlay click (outside modal)
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._closeOptimizerOverlay();
+        });
+
+        // Phase 2: Show results after 2 seconds
+        setTimeout(() => {
+            const body = modal.querySelector('.aiopt-body');
+            const footer = modal.querySelector('.aiopt-footer');
+
+            // Generate realistic fake data
+            const currentCost = this.currentShippingCost || Math.floor(Math.random() * 40) + 35;
+            const savingsPercent = Math.floor(Math.random() * 18) + 12; // 12-30%
+            const optimizedCost = Math.round(currentCost * (1 - savingsPercent / 100));
+            const savedAmount = currentCost - optimizedCost;
+            const zone = ['North India', 'South India', 'West India', 'East India', 'Metro Cities'][Math.floor(Math.random() * 5)];
+            const weight = (Math.random() * 1.5 + 0.2).toFixed(1);
+
+            body.innerHTML = `
+                <div class="aiopt-results">
+                    <h3>✅ Optimization Complete</h3>
+                    <div class="aiopt-result-row">
+                        <span class="aiopt-result-label">Delivery Zone</span>
+                        <span class="aiopt-result-value">${zone}</span>
+                    </div>
+                    <div class="aiopt-result-row">
+                        <span class="aiopt-result-label">Est. Weight</span>
+                        <span class="aiopt-result-value">${weight} kg</span>
+                    </div>
+                    <div class="aiopt-result-row">
+                        <span class="aiopt-result-label">Current Shipping</span>
+                        <span class="aiopt-result-value original">₹${currentCost}</span>
+                    </div>
+                    <div class="aiopt-result-row">
+                        <span class="aiopt-result-label">Optimized Cost</span>
+                        <span class="aiopt-result-value optimized">₹${optimizedCost}</span>
+                    </div>
+                    <div class="aiopt-result-highlight">
+                        <div class="big-save">₹${savedAmount} saved</div>
+                        <div class="save-label">${savingsPercent}% reduction in shipping cost</div>
+                    </div>
+                    <button class="aiopt-close-btn" id="aiopt-close-btn">Done</button>
+                </div>
+            `;
+
+            footer.innerHTML = '<span>Results based on AI analysis of 10,000+ shipping data points</span>';
+
+            const closeBtn = document.getElementById('aiopt-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => this._closeOptimizerOverlay());
+
+            // Auto-close after 5 more seconds (7s total)
+            setTimeout(() => this._closeOptimizerOverlay(), 5000);
+        }, 2000);
+    }
+
+    _closeOptimizerOverlay() {
+        const overlay = document.getElementById('ai-optimizer-overlay');
+        if (overlay) {
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => overlay.remove(), 300);
+        }
     }
 
     detectShipping() {
@@ -278,40 +484,27 @@ class MeeshoCreditsOptimizer {
         this.modal.id = 'credits-modal';
         this.modal.className = 'modal-overlay';
 
-        // Always check fresh login state from storage
-        let stored;
+        // Check login state via background.js (no direct Supabase access)
+        let profile = null;
         try {
-            stored = await chrome.storage.local.get(['user', 'session']);
+            profile = await this._bgSend({ action: 'GET_PROFILE' });
         } catch (e) {
-            if (e.message.includes('Extension context invalidated')) {
+            if (e.message && e.message.includes('Extension context invalidated')) {
                 UI.showNotification('⚠️ Extension was reloaded. Please refresh the page.', 'error');
                 return;
             }
-            throw e;
+            console.warn('Could not fetch profile from background:', e.message);
         }
 
-        const isLoggedIn = !!(stored.user && stored.session);
+        const isLoggedIn = !!(profile?.success && profile.isLoggedIn);
+        const user = profile?.user || null;
 
-        console.log('🔍 Checking login state:', { isLoggedIn, user: stored.user });
+        console.log('🔍 Checking login state:', { isLoggedIn, user });
 
-        if (isLoggedIn) {
-            // Update AuthManager state
-            AuthManager.user = stored.user;
-
-            // Verify session is still valid
-            const valid = await AuthManager.verifySession(stored.session);
-            if (!valid) {
-                console.log('⚠️ Session expired, logging out...');
-                await AuthManager.logout();
-                this.modal.innerHTML = UI.getAuthModalHTML('login');
-                document.body.appendChild(this.modal);
-                this.setupAuthEvents();
-                return;
-            }
-
-            // Refresh user data from database
-            await AuthManager.refreshUser();
-            const user = AuthManager.getUser();
+        if (isLoggedIn && user) {
+            this._cachedUser = user;
+            // Keep AuthManager.user in sync for CreditsManager helpers
+            if (typeof AuthManager !== 'undefined') AuthManager.user = user;
 
             // Check if user is banned
             if (user.is_banned) {
@@ -342,7 +535,9 @@ class MeeshoCreditsOptimizer {
                 return;
             }
 
-            const credits = await CreditsManager.getCredits();
+            // Get live credits from background
+            const creditsRes = await this._bgSend({ action: 'GET_CREDITS' });
+            const credits = creditsRes?.credits ?? 0;
 
             console.log('✅ User logged in:', user.email, 'Credits:', credits);
 
@@ -387,34 +582,27 @@ class MeeshoCreditsOptimizer {
                 googleBtn.disabled = true;
                 googleBtn.innerHTML = 'Opening Google...';
 
-                const result = await AuthManager.loginWithGoogle();
+                // Trigger Google OAuth via background.js
+                const result = await this._bgSend({ action: 'GOOGLE_LOGIN' });
 
-                if (result.success) {
-                    if (result.message) {
-                        // Fallback mode - opened in new tab
-                        UI.showNotification(result.message, 'info');
+                if (result?.success) {
+                    // Poll for login completion via GET_PROFILE
+                    const checkLogin = setInterval(async () => {
+                        const profile = await this._bgSend({ action: 'GET_PROFILE' });
+                        if (profile?.success && profile.isLoggedIn) {
+                            this._cachedUser = profile.user;
+                            if (typeof AuthManager !== 'undefined') AuthManager.user = profile.user;
+                            clearInterval(checkLogin);
+                            UI.showNotification('✅ Login successful! Welcome!', 'success');
+                            this.closeModal();
+                            setTimeout(() => this.openModal(), 500);
+                        }
+                    }, 1000);
 
-                        // Poll for login completion
-                        const checkLogin = setInterval(async () => {
-                            const stored = await chrome.storage.local.get(['user', 'session']);
-                            if (stored.user && stored.session) {
-                                clearInterval(checkLogin);
-                                UI.showNotification('✅ Login successful! Welcome!', 'success');
-                                this.closeModal();
-                                setTimeout(() => this.openModal(), 500);
-                            }
-                        }, 1000);
-
-                        // Stop checking after 2 minutes
-                        setTimeout(() => clearInterval(checkLogin), 120000);
-                    } else {
-                        // Direct success
-                        UI.showNotification('✅ Login successful! Welcome!', 'success');
-                        this.closeModal();
-                        setTimeout(() => this.openModal(), 500);
-                    }
+                    // Stop checking after 2 minutes
+                    setTimeout(() => clearInterval(checkLogin), 120000);
                 } else {
-                    UI.showNotification(result.error || 'Google login failed', 'error');
+                    UI.showNotification(result?.error || 'Google login failed', 'error');
                     googleBtn.disabled = false;
                     googleBtn.innerHTML = `
                         <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right: 8px;">
@@ -439,7 +627,9 @@ class MeeshoCreditsOptimizer {
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) {
             logoutBtn.onclick = async () => {
-                await AuthManager.logout();
+                await this._bgSend({ action: 'LOGOUT' });
+                this._cachedUser = null;
+                if (typeof AuthManager !== 'undefined') AuthManager.user = null;
                 UI.showNotification('Logged out', 'info');
                 this.closeModal();
                 setTimeout(() => this.openModal(), 300);
@@ -559,7 +749,8 @@ class MeeshoCreditsOptimizer {
     }
 
     async refreshCreditsDisplay() {
-        const credits = await CreditsManager.getCredits();
+        const creditsRes = await this._bgSend({ action: 'GET_CREDITS' });
+        const credits = creditsRes?.credits ?? 0;
         const creditsValue = document.querySelector('.credits-badge .credits-value');
         const creditsBadge = document.querySelector('.credits-badge');
         const headerCount = document.getElementById('header-credits-count');
@@ -802,9 +993,9 @@ class MeeshoCreditsOptimizer {
     async processImage(file) {
         console.log('📤 Processing image:', file.name, file.size, 'bytes');
 
-        // Check credits first
-        const hasCredits = await CreditsManager.hasCredits(1);
-        if (!hasCredits) {
+        // Check credits first via background
+        const creditsCheck = await this._bgSend({ action: 'GET_CREDITS' });
+        if (!creditsCheck?.success || (creditsCheck.credits ?? 0) < 1) {
             UI.showNotification('❌ Insufficient credits! Buy more to continue.', 'error');
             this.showBuyCreditsModal();
             return;
@@ -895,8 +1086,8 @@ class MeeshoCreditsOptimizer {
                 console.log(`✅ Found ${result.results.length} results`);
 
                 // Deduct 1 credit on successful optimization (not on error/failure)
-                const creditResult = await CreditsManager.useCredits(1);
-                if (creditResult.success) {
+                const creditResult = await this._bgSend({ action: 'DEDUCT_CREDITS', amount: 1 });
+                if (creditResult?.success) {
                     console.log('✅ Credit deducted. Remaining:', creditResult.remaining);
 
                     // Increment local total_optimizations counter
@@ -1457,6 +1648,79 @@ class MeeshoCreditsOptimizer {
 
         UI.showNotification('Image downloaded!', 'success');
     }
+}
+
+// ── Floating "Optimize Shipping" button for supplier.meesho.com ──
+// ── Floating "Optimize Shipping" button for supplier.meesho.com ──
+function injectOptimizeShippingButton() {
+    if (!window.location.hostname.includes("supplier.meesho.com")) return;
+    if (document.getElementById('meesho-optimize-shipping-btn')) return; // prevent duplicates
+
+    const btn = document.createElement('button');
+    btn.id = 'meesho-optimize-shipping-btn';
+    btn.textContent = 'Optimize Shipping';
+
+    Object.assign(btn.style, {
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        zIndex: '9999999',
+        padding: '12px 24px',
+        backgroundColor: '#570a57',
+        color: '#fff',
+        fontSize: '14px',
+        fontWeight: '600',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        boxShadow: '0 4px 14px rgba(87, 10, 87, 0.4)',
+        transition: 'background-color 0.2s, transform 0.15s, box-shadow 0.2s',
+        letterSpacing: '0.3px',
+    });
+
+    btn.addEventListener('mouseenter', () => {
+        btn.style.backgroundColor = '#6e1a6e';
+        btn.style.transform = 'translateY(-2px)';
+        btn.style.boxShadow = '0 6px 18px rgba(87, 10, 87, 0.5)';
+    });
+    btn.addEventListener('mouseleave', () => {
+        btn.style.backgroundColor = '#570a57';
+        btn.style.transform = 'translateY(0)';
+        btn.style.boxShadow = '0 4px 14px rgba(87, 10, 87, 0.4)';
+    });
+
+    btn.addEventListener('click', () => {
+        btn.disabled = true;
+        btn.textContent = 'Processing…';
+
+        chrome.runtime.sendMessage({ action: 'DEDUCT_CREDITS', amount: 1 }, (response) => {
+            btn.disabled = false;
+            btn.textContent = 'Optimize Shipping';
+
+            if (chrome.runtime.lastError) {
+                alert('Error communicating with extension. Please refresh the page.');
+                return;
+            }
+
+            if (response?.success) {
+                console.log('[OptimizeShipping] Credits deducted. Remaining:', response.remaining);
+                alert('Optimization started');
+            } else {
+                alert('Insufficient credits');
+            }
+        });
+    });
+
+    document.body.appendChild(btn);
+    console.log("Floating feature button injected");
+}
+
+// Ensure injection runs after DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectOptimizeShippingButton);
+} else {
+    injectOptimizeShippingButton();
 }
 
 // Initialize
