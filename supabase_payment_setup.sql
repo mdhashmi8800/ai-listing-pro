@@ -24,9 +24,5 @@ CREATE POLICY "Users can view their own payments"
 ON public.payments FOR SELECT
 USING (auth.uid() = user_id);
 
--- Only service role can insert/update payments (handled by Edge Functions)
-CREATE POLICY "Service role can manage payments"
-ON public.payments FOR ALL
-USING (true)
-WITH CHECK (true);
--- Note: In Supabase, policies don't apply to service_role, but explicit policies can be useful.
+-- Note: Service role bypasses RLS automatically.
+-- No open policy needed — only Edge Functions (service_role) should insert/update payments.

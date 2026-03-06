@@ -114,7 +114,7 @@ BEGIN
       SPLIT_PART(COALESCE(NEW.email, ''), '@', 1)
     ),
     NEW.raw_user_meta_data->>'avatar_url',
-    10,       -- signup bonus credits
+    15,       -- signup bonus credits
     'free'
   )
   ON CONFLICT (id) DO NOTHING;
@@ -122,7 +122,7 @@ BEGIN
   -- Log signup bonus (only if user was actually inserted)
   IF FOUND THEN
     INSERT INTO public.credit_transactions (user_id, delta, reason, meta)
-    VALUES (NEW.id, 10, 'signup_bonus', '{"note":"Welcome gift"}');
+    VALUES (NEW.id, 15, 'signup_bonus', '{"note":"Welcome gift"}');
   END IF;
 
   RETURN NEW;
