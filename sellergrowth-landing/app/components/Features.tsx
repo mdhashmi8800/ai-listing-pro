@@ -111,10 +111,3 @@ export default function Features() {
     </section>
   );
 }
-            </svg>
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
