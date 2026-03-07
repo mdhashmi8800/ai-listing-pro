@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Checkout - AI Listing Pro</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #0f172a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #e2e8f0;
+        }
+        .checkout-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 20px;
+            text-align: center;
+        }
+        .checkout-wrapper h2 {
+            font-size: 18px;
+            margin-bottom: 6px;
+            color: #f8fafc;
+        }
+        .checkout-wrapper p {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 20px;
+        }
+        .status-msg {
+            font-size: 14px;
+            color: #c4b5fd;
+            margin-top: 12px;
+        }
+        .status-msg.success { color: #a7f3d0; }
+        .status-msg.error { color: #fecaca; }
+    </style>
+</head>
+<body>
+<div class="checkout-wrapper">
+    <h2>AI Listing Pro</h2>
+    <p id="plan-label">Loading payment...</p>
+    <div class="status-msg" id="status-msg">Initializing secure checkout...</div>
+</div>
+<script>
+    function safePostToParent(data) {
+        try { window.parent.postMessage(data, '*'); } catch(e) { console.error('postMessage error', e); }
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('order_id');
+    const amount = params.get('amount');
+    const key = params.get('key');
+    const phone = params.get('phone') || '';
+    const planName = params.get('plan') || 'Subscription Plan';
+    const userId = params.get('user_id') || '';
+    const planId = params.get('plan_id') || '';
+    const durationDays = params.get('duration_days') || '';
+    const statusEl = document.getElementById('status-msg');
+    const planLabel = document.getElementById('plan-label');
+
+    if (planLabel) {
+        planLabel.textContent = 'Plan: ' + planName;
+    }
+
+    if (!orderId || !amount || !key) {
+        if (statusEl) {
+            statusEl.textContent = 'Missing payment details. Please go back and try again.';
+            statusEl.className = 'status-msg error';
+        }
+    } else {
+        // Auto-start Razorpay checkout
+        const options = {
+            key: key,
+            amount: parseInt(amount, 10),
+            currency: "INR",
+            name: "AI Listing Pro",
+            description: planName,
+            order_id: orderId,
+
+            handler: async function (response) {
+                if (statusEl) {
+                    statusEl.textContent = 'Payment successful! Verifying...';
+                    statusEl.className = 'status-msg success';
+                }
+
+                // Call verify-payment API directly
+                try {
+                    const verifyRes = await fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature,
+                            user_id: userId,
+                            plan: planId,
+                            duration_days: durationDays,
+                            amount: parseInt(amount, 10) / 100,
+                            phone: phone
+                        })
+                    });
+                    const result = await verifyRes.json();
+                    if (result.success) {
+                        if (statusEl) statusEl.textContent = 'Payment verified! Redirecting...';
+                    } else {
+                        console.error('verify-payment error:', result);
+                    }
+                } catch (err) {
+                    console.error('verify-payment fetch failed:', err);
+                }
+
+                // Also notify parent via postMessage (fallback for extension)
+                safePostToParent({
+                    type: "PAYMENT_SUCCESS",
+                    data: response
+                });
+            },
+
+            modal: {
+                ondismiss: function () {
+                    if (statusEl) {
+                        statusEl.textContent = 'Payment cancelled. Returning to plans...';
+                        statusEl.className = 'status-msg';
+                    }
+                    safePostToParent({ type: "PAYMENT_CANCELLED" });
+                },
+                escape: true,
+                backdropclose: false,
+                confirm_close: true
+            },
+
+            prefill: phone ? { contact: '+91' + phone } : {},
+
+            theme: {
+                color: "#7c3aed"
+            }
+        };
+
+        // Small delay to ensure the page is fully rendered before opening
+        setTimeout(function() {
+            if (statusEl) statusEl.textContent = 'Opening payment form...';
+            const rzp = new Razorpay(options);
+            rzp.open();
+        }, 300);
+    }
+</script>
+</body>
+</html>
