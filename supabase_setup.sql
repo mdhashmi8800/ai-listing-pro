@@ -1,14 +1,18 @@
 -- ============================================================
 --  MEESHO AI TOOL — Supabase Database Setup (v2)
 --  Run this in: Supabase Dashboard → SQL Editor → New Query
+--
+--  NOTE: Extension code (background.js, popup.js, content.js)
+--  queries the "profiles" table — NOT "users".
 -- ============================================================
 
 -- ═══════════════════════════════════════════════════════════
---  1. USERS TABLE
+--  1. PROFILES TABLE
 --     Stores user profile, credits, plan, ban status + IP
+--     Extension queries: /rest/v1/profiles?id=eq.<user_id>
 -- ═══════════════════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS public.users (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id               UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email            TEXT,
   phone            TEXT,
@@ -16,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   avatar_url       TEXT,
 
   -- Credits & Plan
-  credits          INTEGER     NOT NULL DEFAULT 10,
+  credits          INTEGER     NOT NULL DEFAULT 15,
   plan             TEXT        NOT NULL DEFAULT 'free',    -- 'free' | 'pro' | 'enterprise'
   unlimited_until  TIMESTAMPTZ,                            -- NULL = not unlimited
 
@@ -39,7 +43,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 CREATE TABLE IF NOT EXISTS public.credit_transactions (
   id          BIGSERIAL   PRIMARY KEY,
-  user_id     UUID        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  user_id     UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   delta       INTEGER     NOT NULL,        -- +ve = added, -ve = consumed
   reason      TEXT        NOT NULL,        -- 'signup_bonus' | 'ai_run' | 'topup' | 'manual'
   meta        JSONB,                       -- optional context
@@ -50,21 +54,21 @@ CREATE TABLE IF NOT EXISTS public.credit_transactions (
 --  3. ROW LEVEL SECURITY
 -- ═══════════════════════════════════════════════════════════
 
-ALTER TABLE public.users              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_transactions ENABLE ROW LEVEL SECURITY;
 
--- Users: can read & update own row; insert own row (first login)
-DROP POLICY IF EXISTS "users_select_own" ON public.users;
-DROP POLICY IF EXISTS "users_update_own" ON public.users;
-DROP POLICY IF EXISTS "users_insert_own" ON public.users;
+-- Profiles: can read & update own row; insert own row (first login)
+DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
 
-CREATE POLICY "users_select_own" ON public.users
+CREATE POLICY "profiles_select_own" ON public.profiles
   FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "users_update_own" ON public.users
+CREATE POLICY "profiles_update_own" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
-CREATE POLICY "users_insert_own" ON public.users
+CREATE POLICY "profiles_insert_own" ON public.profiles
   FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Transactions: read own only
@@ -85,9 +89,9 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS users_updated_at ON public.users;
-CREATE TRIGGER users_updated_at
-  BEFORE UPDATE ON public.users
+DROP TRIGGER IF EXISTS profiles_updated_at ON public.profiles;
+CREATE TRIGGER profiles_updated_at
+  BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- ═══════════════════════════════════════════════════════════
@@ -103,7 +107,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.users (id, email, phone, name, avatar_url, credits, plan)
+  INSERT INTO public.profiles (id, email, phone, name, avatar_url, credits, plan)
   VALUES (
     NEW.id,
     NEW.email,
@@ -152,7 +156,7 @@ DECLARE
   new_credits INTEGER;
 BEGIN
   -- Only deduct if enough balance AND not in unlimited period
-  UPDATE public.users
+  UPDATE public.profiles
   SET
     credits    = credits - p_amount,
     updated_at = NOW()
@@ -172,7 +176,7 @@ BEGIN
     BEGIN
       SELECT credits, unlimited_until, is_banned
         INTO v_credits, v_unlimited, v_banned
-        FROM public.users
+        FROM public.profiles
        WHERE id = p_user_id;
 
       IF v_banned THEN
@@ -210,7 +214,7 @@ AS $$
 DECLARE
   new_credits INTEGER;
 BEGIN
-  UPDATE public.users
+  UPDATE public.profiles
   SET credits    = credits + p_amount,
       updated_at = NOW()
   WHERE id = p_user_id
@@ -260,7 +264,7 @@ CREATE TABLE IF NOT EXISTS public.promo_codes (
 
 CREATE TABLE IF NOT EXISTS public.promo_usage (
   id          BIGSERIAL   PRIMARY KEY,
-  user_id     UUID        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  user_id     UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   promo_id    BIGINT      NOT NULL REFERENCES public.promo_codes(id) ON DELETE CASCADE,
   used_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, promo_id)  -- each user can use a promo only once
@@ -273,7 +277,7 @@ CREATE TABLE IF NOT EXISTS public.promo_usage (
 
 CREATE TABLE IF NOT EXISTS public.usage_logs (
   id           BIGSERIAL   PRIMARY KEY,
-  user_id      UUID        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  user_id      UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   credits_used INTEGER     NOT NULL DEFAULT 1,
   action       TEXT        NOT NULL DEFAULT 'optimization',
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -327,14 +331,95 @@ CREATE POLICY "usage_logs_insert_own" ON public.usage_logs
 --   ('VIP90',      'unlimited', NULL, 90,  10);      -- 90 days unlimited, max 10 uses
 
 -- ═══════════════════════════════════════════════════════════
+--  13. SUBSCRIPTIONS TABLE
+--     popup.js queries: /rest/v1/subscriptions?user_id=eq.<id>&status=eq.active
+--     Fields used: user_id, status, plan_name, end_date, start_date
+-- ═══════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+  id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID          NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  plan_name     TEXT          NOT NULL DEFAULT 'trial',    -- 'trial' | 'monthly' | 'quarterly' | 'half_yearly' | 'yearly'
+  status        TEXT          NOT NULL DEFAULT 'active',   -- 'active' | 'expired' | 'cancelled'
+  start_date    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  end_date      TIMESTAMPTZ   NOT NULL,
+  razorpay_payment_id TEXT,
+  razorpay_order_id   TEXT,
+  amount        DECIMAL,
+  phone         TEXT,
+  created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Users can read their own subscriptions
+DROP POLICY IF EXISTS "subscriptions_select_own" ON public.subscriptions;
+CREATE POLICY "subscriptions_select_own" ON public.subscriptions
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- ═══════════════════════════════════════════════════════════
+--  14. deduct_credit() — RPC called by background.js
+--     Uses auth.uid() automatically, no user_id param needed.
+--     Extension calls: /rest/v1/rpc/deduct_credit
+-- ═══════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.deduct_credit(amount INT DEFAULT 1)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_user_id   UUID := auth.uid();
+  new_credits INTEGER;
+  v_credits   INTEGER;
+  v_unlimited TIMESTAMPTZ;
+  v_banned    BOOLEAN;
+BEGIN
+  UPDATE public.profiles
+  SET
+    credits    = credits - amount,
+    updated_at = NOW()
+  WHERE
+    id         = v_user_id
+    AND credits >= amount
+    AND (unlimited_until IS NULL OR unlimited_until < NOW())
+    AND is_banned = FALSE
+  RETURNING credits INTO new_credits;
+
+  IF NOT FOUND THEN
+    SELECT credits, unlimited_until, is_banned
+      INTO v_credits, v_unlimited, v_banned
+      FROM public.profiles
+     WHERE id = v_user_id;
+
+    IF v_banned THEN
+      RAISE EXCEPTION 'account_banned';
+    ELSIF v_unlimited IS NOT NULL AND v_unlimited > NOW() THEN
+      RETURN v_credits;
+    ELSE
+      RAISE EXCEPTION 'insufficient_credits';
+    END IF;
+  END IF;
+
+  INSERT INTO public.credit_transactions (user_id, delta, reason)
+  VALUES (v_user_id, -amount, 'optimization');
+
+  RETURN new_credits;
+END;
+$$;
+
+-- ═══════════════════════════════════════════════════════════
 --  COMPLETE SETUP SUMMARY:
---  ✅ users               — profile, credits, plan, ban, IP
+--  ✅ profiles             — profile, credits, plan, ban, IP
 --  ✅ credit_transactions  — full audit log
 --  ✅ promo_codes          — promo/coupon system
 --  ✅ promo_usage          — per-user promo tracking
 --  ✅ usage_logs           — analytics
+--  ✅ subscriptions        — subscription plans tracking
 --  ✅ RLS on all tables
---  ✅ handle_new_user()    — auto signup bonus
---  ✅ use_credit()         — atomic credit deduction
+--  ✅ handle_new_user()    — auto signup bonus (15 credits)
+--  ✅ use_credit()         — atomic credit deduction (param-based)
+--  ✅ deduct_credit()      — atomic credit deduction (auth.uid()-based, used by extension)
 --  ✅ add_credits()        — admin credit topup
 -- ═══════════════════════════════════════════════════════════

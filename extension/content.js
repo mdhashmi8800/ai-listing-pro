@@ -72,6 +72,10 @@ class MeeshoCreditsOptimizer {
                     this.showOptimizerOverlay();
                     sendResponse({ success: true });
                 }
+                if (message.action === 'AUTO_FILL_LISTING') {
+                    this.autoFillMeeshoListing(message.data);
+                    sendResponse({ success: true });
+                }
                 return true;
             });
         } catch (e) {
@@ -137,8 +141,191 @@ class MeeshoCreditsOptimizer {
         return window.location.href.includes('supplier.meesho.com');
     }
 
+    // ── Auto Fill Meesho Listing Form ──────────────────────────
+    autoFillMeeshoListing(data) {
+        if (!data) return;
+        console.log('🚀 Auto-filling Meesho listing form:', data);
+
+        const filled = [];
+
+        // Helper: set value on an input/textarea and trigger React change events
+        const setFieldValue = (element, value) => {
+            if (!element) return false;
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            )?.set || Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype, 'value'
+            )?.set;
+
+            if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(element, value);
+            } else {
+                element.value = value;
+            }
+
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('blur', { bubbles: true }));
+            return true;
+        };
+
+        // Strategy 1: Try common Meesho form selectors
+        const titleSelectors = [
+            'input[name="product_name"]',
+            'input[name="productName"]',
+            'input[name="title"]',
+            'input[placeholder*="product name" i]',
+            'input[placeholder*="title" i]',
+            'input[data-testid*="product-name"]',
+            'input[data-testid*="title"]',
+        ];
+
+        const descSelectors = [
+            'textarea[name="description"]',
+            'textarea[name="product_description"]',
+            'textarea[placeholder*="description" i]',
+            'textarea[data-testid*="description"]',
+        ];
+
+        // Fill title
+        if (data.title) {
+            for (const sel of titleSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    if (setFieldValue(el, data.title)) {
+                        filled.push('title');
+                        break;
+                    }
+                }
+            }
+
+            // Fallback: find any visible input near "Product Name" or "Title" label
+            if (!filled.includes('title')) {
+                const labels = document.querySelectorAll('label, span, div, p');
+                for (const label of labels) {
+                    const text = (label.textContent || '').trim().toLowerCase();
+                    if (text === 'product name' || text === 'title' || text.includes('product name')) {
+                        const parent = label.closest('div');
+                        if (parent) {
+                            const input = parent.querySelector('input[type="text"], input:not([type])');
+                            if (input && setFieldValue(input, data.title)) {
+                                filled.push('title');
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fill description
+        if (data.description) {
+            for (const sel of descSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    if (setFieldValue(el, data.description)) {
+                        filled.push('description');
+                        break;
+                    }
+                }
+            }
+
+            if (!filled.includes('description')) {
+                const textareas = document.querySelectorAll('textarea');
+                for (const ta of textareas) {
+                    const parent = ta.closest('div');
+                    const parentText = parent ? (parent.textContent || '').toLowerCase() : '';
+                    if (parentText.includes('description')) {
+                        if (setFieldValue(ta, data.description)) {
+                            filled.push('description');
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fill keywords / search terms
+        if (data.keywords && data.keywords.length > 0) {
+            const kwSelectors = [
+                'input[name="keywords"]',
+                'input[name="search_keywords"]',
+                'input[placeholder*="keyword" i]',
+                'input[placeholder*="search term" i]',
+                'textarea[placeholder*="keyword" i]',
+            ];
+
+            const kwText = data.keywords.join(', ');
+            for (const sel of kwSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    if (setFieldValue(el, kwText)) {
+                        filled.push('keywords');
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Show notification to user
+        if (filled.length > 0) {
+            console.log('✅ Auto-filled fields:', filled.join(', '));
+            this._showAutoFillNotification(
+                `✅ Auto-filled: ${filled.join(', ')}. Please review and save your listing.`,
+                'success'
+            );
+        } else {
+            console.warn('⚠️ Could not find Meesho form fields to fill');
+            this._showAutoFillNotification(
+                '⚠️ Could not find form fields. Please make sure you are on a Meesho product listing/edit page.',
+                'warning'
+            );
+        }
+    }
+
+    _showAutoFillNotification(message, type = 'success') {
+        const existing = document.getElementById('ai-autofill-notification');
+        if (existing) existing.remove();
+
+        const notif = document.createElement('div');
+        notif.id = 'ai-autofill-notification';
+        notif.style.cssText = `
+            position: fixed; top: 20px; right: 20px; z-index: 999999;
+            max-width: 420px; padding: 16px 20px;
+            background: ${type === 'success' ? '#ECFDF5' : '#FFFBEB'};
+            border: 1px solid ${type === 'success' ? '#10B981' : '#F59E0B'};
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 13px; font-weight: 500;
+            color: ${type === 'success' ? '#065F46' : '#92400E'};
+            animation: slideInRight 0.3s ease;
+        `;
+
+        const styleEl = document.createElement('style');
+        styleEl.textContent = '@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}';
+        notif.appendChild(styleEl);
+
+        const text = document.createElement('span');
+        text.textContent = message;
+        notif.appendChild(text);
+
+        document.body.appendChild(notif);
+
+        setTimeout(() => {
+            notif.style.opacity = '0';
+            notif.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => notif.remove(), 300);
+        }, 5000);
+    }
+
     addOptimizerButton() {
-        if (document.querySelector('.optimizer-btn')) return;
+        // Remove ALL existing optimizer buttons to prevent duplicates
+        document.querySelectorAll('.optimizer-btn').forEach(el => {
+            const wrapper = el.closest('div[style*="margin"]') || el.parentElement;
+            if (wrapper && wrapper !== document.body) wrapper.remove();
+            else el.remove();
+        });
 
         const imageInput = document.querySelector('#changeFrontImage');
         if (!imageInput) return;
@@ -1648,79 +1835,6 @@ class MeeshoCreditsOptimizer {
 
         UI.showNotification('Image downloaded!', 'success');
     }
-}
-
-// ── Floating "Optimize Shipping" button for supplier.meesho.com ──
-// ── Floating "Optimize Shipping" button for supplier.meesho.com ──
-function injectOptimizeShippingButton() {
-    if (!window.location.hostname.includes("supplier.meesho.com")) return;
-    if (document.getElementById('meesho-optimize-shipping-btn')) return; // prevent duplicates
-
-    const btn = document.createElement('button');
-    btn.id = 'meesho-optimize-shipping-btn';
-    btn.textContent = 'Optimize Shipping';
-
-    Object.assign(btn.style, {
-        position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        zIndex: '9999999',
-        padding: '12px 24px',
-        backgroundColor: '#570a57',
-        color: '#fff',
-        fontSize: '14px',
-        fontWeight: '600',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        boxShadow: '0 4px 14px rgba(87, 10, 87, 0.4)',
-        transition: 'background-color 0.2s, transform 0.15s, box-shadow 0.2s',
-        letterSpacing: '0.3px',
-    });
-
-    btn.addEventListener('mouseenter', () => {
-        btn.style.backgroundColor = '#6e1a6e';
-        btn.style.transform = 'translateY(-2px)';
-        btn.style.boxShadow = '0 6px 18px rgba(87, 10, 87, 0.5)';
-    });
-    btn.addEventListener('mouseleave', () => {
-        btn.style.backgroundColor = '#570a57';
-        btn.style.transform = 'translateY(0)';
-        btn.style.boxShadow = '0 4px 14px rgba(87, 10, 87, 0.4)';
-    });
-
-    btn.addEventListener('click', () => {
-        btn.disabled = true;
-        btn.textContent = 'Processing…';
-
-        chrome.runtime.sendMessage({ action: 'DEDUCT_CREDITS', amount: 1 }, (response) => {
-            btn.disabled = false;
-            btn.textContent = 'Optimize Shipping';
-
-            if (chrome.runtime.lastError) {
-                alert('Error communicating with extension. Please refresh the page.');
-                return;
-            }
-
-            if (response?.success) {
-                console.log('[OptimizeShipping] Credits deducted. Remaining:', response.remaining);
-                alert('Optimization started');
-            } else {
-                alert('Insufficient credits');
-            }
-        });
-    });
-
-    document.body.appendChild(btn);
-    console.log("Floating feature button injected");
-}
-
-// Ensure injection runs after DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectOptimizeShippingButton);
-} else {
-    injectOptimizeShippingButton();
 }
 
 // Initialize

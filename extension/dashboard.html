@@ -23,31 +23,39 @@
           </div>
           <div class="sidebar-logo-text">
             <span class="brand-name">AI Listing Pro</span>
-            <span class="brand-sub">Seller Intelligence</span>
+            <span class="brand-sub">Meesho Seller Tool</span>
           </div>
         </div>
       </div>
 
       <!-- Navigation -->
       <nav class="sidebar-nav">
-        <div class="nav-section-label">Main</div>
+        <div class="nav-section-label">Tools</div>
 
-        <!-- Overview -->
-        <button class="nav-item active" data-page="overview">
+        <!-- AI Listing Generator -->
+        <button class="nav-item active" data-page="listing">
           <span class="nav-icon">
-            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </span>
-          Overview
+          <span class="nav-label">AI Listing</span>
+          <span class="nav-badge">1 cr</span>
         </button>
 
-        <div class="nav-section-label">AI Tools</div>
+        <!-- Keyword Generator -->
+        <button class="nav-item" data-page="keywords">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <span class="nav-label">Keywords</span>
+          <span class="nav-badge">1 cr</span>
+        </button>
 
         <!-- Shipping Optimizer -->
         <button class="nav-item" data-page="shipping">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
           </span>
-          Shipping Optimizer
+          <span class="nav-label">Shipping Optimizer</span>
           <span class="nav-badge">Free</span>
         </button>
 
@@ -56,36 +64,25 @@
           <span class="nav-icon">
             <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           </span>
-          Profit Calculator
-          <span class="nav-badge">1 cr</span>
+          <span class="nav-label">Profit Calc</span>
+          <span class="nav-badge">Free</span>
         </button>
 
-        <!-- Return Analyzer -->
-        <button class="nav-item" data-page="returns">
-          <span class="nav-icon">
-            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-          </span>
-          Return Analyzer
-          <span class="nav-badge">1 cr</span>
-        </button>
-
-        <!-- Bulk Optimization -->
+        <!-- Bulk Listing -->
         <button class="nav-item" data-page="bulk">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
           </span>
-          Bulk Optimization
+          <span class="nav-label">Bulk Listing</span>
           <span class="nav-badge">Batch</span>
         </button>
-
-        <div class="nav-section-label">Account</div>
 
         <!-- History -->
         <button class="nav-item" data-page="history">
           <span class="nav-icon">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </span>
-          History
+          <span class="nav-label">History</span>
         </button>
       </nav>
 
@@ -95,7 +92,7 @@
           <div class="credits-icon">⚡</div>
           <div class="credits-info">
             <div class="credits-count" id="sidebar-credits-count">—</div>
-            <div class="credits-label">Credits remaining</div>
+            <div class="credits-label">Credits left</div>
           </div>
         </div>
         <div class="sidebar-user" id="sidebar-user">
@@ -112,14 +109,19 @@
     <main class="main-area">
       <!-- Top Bar -->
       <div class="top-bar">
-        <div class="top-bar-title" id="top-bar-title">Overview</div>
+        <div class="top-bar-left">
+          <div class="top-bar-title" id="top-bar-title">AI Listing Generator</div>
+          <div class="top-bar-context">
+            <span class="context-dot"></span>
+            <span id="meesho-context">Meesho Supplier Panel</span>
+          </div>
+        </div>
         <div class="top-bar-actions">
-          <button class="top-bar-btn" id="btn-refresh" title="Refresh data">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            Refresh
+          <button class="top-bar-btn" id="btn-refresh" title="Refresh">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           </button>
           <button class="top-bar-btn primary" id="btn-buy-credits">
-            ⚡ Buy Credits
+            ⚡ Credits
           </button>
         </div>
       </div>
@@ -127,147 +129,270 @@
       <!-- Dynamic Content Area -->
       <div class="content-area" id="content-area">
 
-        <!-- ═══ OVERVIEW PAGE ═══ -->
-        <div class="page-panel active" id="page-overview">
-          <!-- Stats -->
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-card-header">
-                <div class="stat-card-icon blue">
-                  <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                </div>
-              </div>
-              <div class="stat-card-value" id="ov-credits">—</div>
-              <div class="stat-card-label">Credits Remaining</div>
+        <!-- ═══ AI LISTING GENERATOR PAGE ═══ -->
+        <div class="page-panel active" id="page-listing">
+          <!-- 3-Step Workflow -->
+          <div class="workflow-steps">
+            <div class="workflow-step active" id="step-1-indicator">
+              <div class="step-number">1</div>
+              <div class="step-label">Upload</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-card-header">
-                <div class="stat-card-icon green">
-                  <svg viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/></svg>
-                </div>
-              </div>
-              <div class="stat-card-value" id="ov-optimizations">—</div>
-              <div class="stat-card-label">Total Optimizations</div>
+            <div class="workflow-connector"></div>
+            <div class="workflow-step" id="step-2-indicator">
+              <div class="step-number">2</div>
+              <div class="step-label">Generate</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-card-header">
-                <div class="stat-card-icon purple">
-                  <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                </div>
-              </div>
-              <div class="stat-card-value" id="ov-plan">—</div>
-              <div class="stat-card-label">Current Plan</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card-header">
-                <div class="stat-card-icon orange">
-                  <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
-              </div>
-              <div class="stat-card-value" id="ov-saved">₹0</div>
-              <div class="stat-card-label">Estimated Savings</div>
+            <div class="workflow-connector"></div>
+            <div class="workflow-step" id="step-3-indicator">
+              <div class="step-number">3</div>
+              <div class="step-label">Apply</div>
             </div>
           </div>
 
-          <!-- Quick Actions -->
-          <div class="quick-actions-section">
-            <div class="section-heading">Quick Actions</div>
-            <div class="quick-actions-grid">
-              <div class="quick-action-card" data-navigate="shipping">
-                <div class="quick-action-icon green">
-                  <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                </div>
-                <h3>Shipping Optimizer</h3>
-                <p>Reduce delivery costs with AI-powered shipping analysis</p>
-                <span class="quick-action-cost free">Free</span>
+          <!-- Step 1: Input -->
+          <div class="step-panel active" id="step-1-panel">
+            <div class="dash-card">
+              <div class="dash-card-title">
+                <span class="card-icon">📷</span>
+                Upload Product Image
               </div>
-              <div class="quick-action-card" data-navigate="profit">
-                <div class="quick-action-icon blue">
-                  <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <div class="upload-zone" id="upload-zone">
+                <div class="upload-zone-content">
+                  <div class="upload-icon">
+                    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                  </div>
+                  <p class="upload-text">Drag &amp; drop image here</p>
+                  <p class="upload-subtext">or click to browse (JPG, PNG, WebP)</p>
+                  <input class="upload-input" type="file" id="listing-image" accept="image/*">
                 </div>
-                <h3>Profit Calculator</h3>
-                <p>Analyze margins, commissions &amp; net profit per product</p>
-                <span class="quick-action-cost">1 Credit</span>
               </div>
-              <div class="quick-action-card" data-navigate="returns">
-                <div class="quick-action-icon orange">
-                  <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <div class="image-preview-bar hidden" id="image-preview-bar">
+                <img id="listing-preview-image" class="preview-thumb" alt="Product preview">
+                <div class="preview-info">
+                  <span class="preview-name" id="preview-file-name">image.jpg</span>
+                  <span class="preview-meta" id="preview-meta">—</span>
                 </div>
-                <h3>Return Analyzer</h3>
-                <p>Identify return patterns and reduce RTO losses</p>
-                <span class="quick-action-cost">1 Credit</span>
+                <button class="preview-remove" id="btn-remove-image" title="Remove">✕</button>
               </div>
+
+              <div class="input-extras">
+                <div class="dash-input-row">
+                  <div class="dash-input-group">
+                    <label class="dash-label">Product Hints</label>
+                    <input class="dash-input" type="text" id="listing-hints" placeholder="e.g. rayon kurti festive">
+                  </div>
+                  <div class="dash-input-group">
+                    <label class="dash-label">Target Buyer</label>
+                    <select class="dash-select" id="listing-audience">
+                      <option value="auto" selected>Auto detect</option>
+                      <option value="Women">Women</option>
+                      <option value="Men">Men</option>
+                      <option value="Kids">Kids</option>
+                      <option value="Home">Home</option>
+                      <option value="Beauty">Beauty</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="dash-input-row">
+                  <div class="dash-input-group">
+                    <label class="dash-label">Price Goal (₹)</label>
+                    <input class="dash-input" type="number" id="listing-price-goal" placeholder="e.g. 499">
+                  </div>
+                  <div class="dash-input-group">
+                    <label class="dash-label">Listing Tone</label>
+                    <select class="dash-select" id="listing-tone">
+                      <option value="balanced" selected>Balanced</option>
+                      <option value="seo">SEO focused</option>
+                      <option value="premium">Premium feel</option>
+                      <option value="conversion">High conversion</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <button class="dash-btn-run full-width" id="btn-run-listing">
+                <span class="btn-icon">🧠</span>
+                Generate Listing — 1 Credit
+              </button>
             </div>
           </div>
 
-          <!-- Recent Activity -->
-          <div class="activity-section">
-            <div class="section-heading">Recent Activity</div>
-            <div class="activity-list" id="activity-list">
-              <div class="empty-state">
-                <div class="empty-state-icon">
-                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </div>
-                <h3>No activity yet</h3>
-                <p>Run your first analysis to see results here</p>
-              </div>
+          <!-- Step 2 & 3: Results + Auto Fill -->
+          <div class="step-panel" id="step-2-panel">
+            <div class="result-preview-card" id="result-listing">
+              <!-- Filled by JS -->
             </div>
           </div>
+        </div>
+
+        <!-- ═══ KEYWORD GENERATOR PAGE ═══ -->
+        <div class="page-panel" id="page-keywords">
+          <div class="tool-header">
+            <div class="tool-header-icon" style="background: rgba(124,58,237,0.12); color: #c4b5fd;">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <div class="tool-header-text">
+              <h2>Keyword Generator</h2>
+              <p>Generate high-ranking search keywords for your Meesho listings</p>
+            </div>
+          </div>
+
+          <div class="dash-card">
+            <div class="dash-card-title"><span class="card-icon">🔍</span> Product Details</div>
+            <div class="dash-input-group">
+              <label class="dash-label">Product Name / Description</label>
+              <input class="dash-input" type="text" id="kw-product" placeholder="e.g. Women Rayon Printed Kurti Festive Wear">
+            </div>
+            <div class="dash-input-row">
+              <div class="dash-input-group">
+                <label class="dash-label">Category</label>
+                <select class="dash-select" id="kw-category">
+                  <option value="auto" selected>Auto detect</option>
+                  <option value="women_ethnic">Women Ethnic Wear</option>
+                  <option value="fashion">Fashion &amp; Apparel</option>
+                  <option value="beauty">Beauty &amp; Personal Care</option>
+                  <option value="home">Home &amp; Kitchen</option>
+                  <option value="electronics">Electronics</option>
+                  <option value="jewelry">Jewelry &amp; Accessories</option>
+                </select>
+              </div>
+              <div class="dash-input-group">
+                <label class="dash-label">Keyword Count</label>
+                <select class="dash-select" id="kw-count">
+                  <option value="10" selected>10 keywords</option>
+                  <option value="20">20 keywords</option>
+                  <option value="30">30 keywords</option>
+                </select>
+              </div>
+            </div>
+            <button class="dash-btn-run full-width" id="btn-run-keywords">
+              <span class="btn-icon">🔍</span>
+              Generate Keywords — 1 Credit
+            </button>
+          </div>
+          <div class="result-box" id="result-keywords"></div>
         </div>
 
         <!-- ═══ SHIPPING OPTIMIZER PAGE ═══ -->
         <div class="page-panel" id="page-shipping">
           <div class="tool-header">
-            <div class="tool-header-icon" style="background: var(--dash-accent-light); color: var(--dash-accent);">
+            <div class="tool-header-icon" style="background: rgba(16,185,129,0.12); color: #34d399;">
               <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
             </div>
             <div class="tool-header-text">
               <h2>Shipping Optimizer</h2>
-              <p>Analyze delivery costs and get AI recommendations to reduce shipping expenses</p>
+              <p>Analyze delivery costs and get AI recommendations to reduce shipping expenses — <strong style="color:#34d399">Free</strong></p>
             </div>
           </div>
 
-          <div class="dash-card">
-            <div class="dash-card-title">📦 Product Details</div>
-            <div class="dash-input-group">
-              <label class="dash-label">Product Name / URL</label>
-              <input class="dash-input" type="text" id="ship-product" placeholder="Enter Meesho product name or URL">
-            </div>
-            <div class="dash-input-row">
-              <div class="dash-input-group">
-                <label class="dash-label">Product Weight (grams)</label>
-                <input class="dash-input" type="number" id="ship-weight" placeholder="e.g. 250">
+          <div class="shipping-shell">
+            <div class="shipping-compact-header">
+              <div class="shipping-header-left">
+                <span class="shipping-logo-icon">🚀</span>
+                <div>
+                  <h3>AI Optimizer</h3>
+                  <p>Reduce shipping costs</p>
+                </div>
               </div>
-              <div class="dash-input-group">
-                <label class="dash-label">Pincode (Origin)</label>
-                <input class="dash-input" type="text" id="ship-pincode" placeholder="e.g. 110001">
+              <div class="shipping-header-right">
+                <div class="shipping-credits-badge" id="ship-credits-badge">
+                  <span class="shipping-credits-label">Credits Left:</span>
+                  <span class="shipping-credits-value" id="ship-header-credits-count">0</span>
+                  <button class="shipping-add-credits" id="ship-buy-credits-btn" type="button" title="Buy more credits">+</button>
+                </div>
               </div>
             </div>
-            <div class="dash-input-group">
-              <label class="dash-label">Current Shipping Cost (₹)</label>
-              <input class="dash-input" type="number" id="ship-cost" placeholder="e.g. 45">
+
+            <div class="shipping-user-bar">
+              <div class="shipping-user-info">
+                <div class="shipping-user-avatar" id="ship-user-avatar">U</div>
+                <span class="shipping-user-name" id="ship-user-name">Loading...</span>
+              </div>
+              <span class="status-badge success">Supplier Panel Style</span>
             </div>
-            <button class="dash-btn-run" id="btn-run-shipping" style="width: 100%; margin-top: 8px;">
-              🚀 Run Shipping Analysis — Free
-            </button>
+
+            <div class="shipping-promo-row">
+              <input type="text" id="ship-promo-code" class="shipping-promo-input" placeholder="🎁 Promo code">
+              <button class="shipping-promo-btn" id="ship-apply-promo-btn" type="button">Apply</button>
+            </div>
+
+            <div class="shipping-section-block" id="ship-category-section">
+              <label class="shipping-section-label">📁 Category</label>
+              <div class="shipping-category-search">
+                <input type="text" id="ship-category-search" class="shipping-search-input" placeholder="🔍 Search category...">
+                <input type="hidden" id="ship-category-select">
+                <button class="shipping-clear-btn" id="ship-category-clear" type="button">×</button>
+                <div class="shipping-dropdown hidden" id="ship-category-dropdown"></div>
+              </div>
+              <div class="shipping-selected-category hidden" id="ship-selected-category">
+                <span>✅</span>
+                <span id="ship-selected-category-name"></span>
+              </div>
+            </div>
+
+            <div class="shipping-upload-area" id="ship-upload-area">
+              <input type="file" id="ship-image-input" accept="image/*" hidden>
+              <div class="shipping-upload-icon">📁</div>
+              <p class="shipping-upload-text">Click or drag image here</p>
+              <p class="shipping-upload-hint">Powered by Ultra-Fast AI • Free dashboard preview</p>
+            </div>
+
+            <div class="shipping-preview-box hidden" id="ship-preview-box">
+              <img class="shipping-preview-img" id="ship-preview-img" alt="Shipping preview">
+            </div>
+
+            <div class="shipping-settings-row" id="ship-settings-row">
+              <div class="shipping-setting">
+                <label for="ship-target-shipping">🎯 Target</label>
+                <select id="ship-target-shipping" class="shipping-select-input">
+                  <option value="30">≤ ₹30</option>
+                  <option value="40">≤ ₹40</option>
+                  <option value="50">≤ ₹50</option>
+                  <option value="60">≤ ₹60</option>
+                  <option value="70">≤ ₹70</option>
+                  <option value="80" selected>≤ ₹80</option>
+                  <option value="90">≤ ₹90</option>
+                  <option value="100">≤ ₹100</option>
+                </select>
+              </div>
+              <div class="shipping-setting">
+                <label for="ship-max-attempts">🔄 Attempts</label>
+                <select id="ship-max-attempts" class="shipping-select-input">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                  <option value="200">200</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="shipping-processing hidden" id="ship-processing-area"></div>
+            <div class="shipping-results hidden" id="result-shipping"></div>
+
+            <div class="shipping-footer">
+              <button class="shipping-footer-btn" id="ship-reset-btn" type="button">Reset</button>
+              <span class="shipping-footer-text">Current Shipping: <span class="shipping-highlight" id="ship-current-status">Ready to analyze</span></span>
+            </div>
           </div>
-          <div class="result-box" id="result-shipping"></div>
         </div>
 
-        <!-- ═══ PROFIT CALCULATOR PAGE ═══ -->
+        <!-- ═══ SHIPPING & PROFIT CALCULATOR PAGE ═══ -->
         <div class="page-panel" id="page-profit">
           <div class="tool-header">
-            <div class="tool-header-icon" style="background: var(--dash-primary-light); color: var(--dash-primary);">
+            <div class="tool-header-icon" style="background: rgba(16,185,129,0.12); color: #34d399;">
               <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </div>
             <div class="tool-header-text">
-              <h2>Profit Calculator</h2>
-              <p>Calculate exact profit margins after Meesho commission, shipping &amp; GST</p>
+              <h2>Shipping &amp; Profit Calc</h2>
+              <p>Calculate exact margins after Meesho commission, shipping &amp; GST — <strong style="color:#34d399">Free</strong></p>
             </div>
           </div>
 
           <div class="dash-card">
-            <div class="dash-card-title">💰 Enter Product Financials</div>
+            <div class="dash-card-title"><span class="card-icon">💰</span> Product Financials</div>
             <div class="dash-input-row">
               <div class="dash-input-group">
                 <label class="dash-label">Selling Price (₹)</label>
@@ -280,108 +405,87 @@
             </div>
             <div class="dash-input-row">
               <div class="dash-input-group">
-                <label class="dash-label">Shipping Charge (₹)</label>
-                <input class="dash-input" type="number" id="profit-shipping" placeholder="e.g. 45">
+                <label class="dash-label">Weight (grams)</label>
+                <input class="dash-input" type="number" id="profit-weight" placeholder="e.g. 350">
               </div>
               <div class="dash-input-group">
-                <label class="dash-label">Commission %</label>
-                <input class="dash-input" type="number" id="profit-commission" placeholder="e.g. 15" step="0.1">
+                <label class="dash-label">Category</label>
+                <select class="dash-select" id="profit-category">
+                  <option value="women_ethnic" selected>Women Ethnic</option>
+                  <option value="fashion">Fashion</option>
+                  <option value="beauty">Beauty</option>
+                  <option value="home">Home</option>
+                  <option value="electronics">Electronics</option>
+                  <option value="jewelry">Jewelry</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
             </div>
-            <div class="dash-input-group">
-              <label class="dash-label">GST %</label>
-              <select class="dash-select" id="profit-gst">
-                <option value="0">0% (Exempted)</option>
-                <option value="5" selected>5%</option>
-                <option value="12">12%</option>
-                <option value="18">18%</option>
-                <option value="28">28%</option>
-              </select>
+            <div class="dash-input-row">
+              <div class="dash-input-group">
+                <label class="dash-label">Packaging (₹)</label>
+                <input class="dash-input" type="number" id="profit-packaging" placeholder="e.g. 12">
+              </div>
+              <div class="dash-input-group">
+                <label class="dash-label">GST %</label>
+                <select class="dash-select" id="profit-gst">
+                  <option value="0">0% (Exempt)</option>
+                  <option value="5" selected>5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
+                </select>
+              </div>
             </div>
-            <button class="dash-btn-run" id="btn-run-profit" style="width: 100%; margin-top: 8px;">
-              📊 Calculate Profit — 1 Credit
+            <div class="dash-input-row">
+              <div class="dash-input-group">
+                <label class="dash-label">Commission Override %</label>
+                <input class="dash-input" type="number" id="profit-commission-override" placeholder="Auto" step="0.1">
+              </div>
+              <div class="dash-input-group">
+                <label class="dash-label">Target Margin %</label>
+                <input class="dash-input" type="number" id="profit-target-margin" placeholder="e.g. 18" value="18" step="0.1">
+              </div>
+            </div>
+            <div class="dash-helper-text">Commission &amp; shipping auto-estimated from category and weight.</div>
+            <button class="dash-btn-run full-width" id="btn-run-profit">
+              <span class="btn-icon">📊</span>
+              Calculate Profit — Free
             </button>
           </div>
           <div class="result-box" id="result-profit"></div>
         </div>
 
-        <!-- ═══ RETURN ANALYZER PAGE ═══ -->
-        <div class="page-panel" id="page-returns">
-          <div class="tool-header">
-            <div class="tool-header-icon" style="background: var(--dash-orange-light); color: var(--dash-orange);">
-              <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            </div>
-            <div class="tool-header-text">
-              <h2>Return Analyzer</h2>
-              <p>Understand why products get returned and get AI suggestions to reduce RTO</p>
-            </div>
-          </div>
-
-          <div class="dash-card">
-            <div class="dash-card-title">📦 Return Details</div>
-            <div class="dash-input-group">
-              <label class="dash-label">Product Category</label>
-              <select class="dash-select" id="return-category">
-                <option value="">Select category</option>
-                <option value="clothing">Clothing & Fashion</option>
-                <option value="electronics">Electronics & Accessories</option>
-                <option value="home">Home & Kitchen</option>
-                <option value="beauty">Beauty & Personal Care</option>
-                <option value="footwear">Footwear</option>
-                <option value="jewelry">Jewelry & Accessories</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div class="dash-input-row">
-              <div class="dash-input-group">
-                <label class="dash-label">Total Orders (Last 30 days)</label>
-                <input class="dash-input" type="number" id="return-orders" placeholder="e.g. 150">
-              </div>
-              <div class="dash-input-group">
-                <label class="dash-label">Total Returns (Last 30 days)</label>
-                <input class="dash-input" type="number" id="return-returns" placeholder="e.g. 23">
-              </div>
-            </div>
-            <div class="dash-input-group">
-              <label class="dash-label">Common Return Reasons (optional)</label>
-              <textarea class="dash-textarea" id="return-reasons" placeholder="e.g. Size mismatch, color different from image, quality issues..."></textarea>
-            </div>
-            <button class="dash-btn-run" id="btn-run-returns" style="width: 100%; margin-top: 8px;">
-              🔍 Analyze Returns — 1 Credit
-            </button>
-          </div>
-          <div class="result-box" id="result-returns"></div>
-        </div>
-
-        <!-- ═══ BULK OPTIMIZATION PAGE ═══ -->
+        <!-- ═══ BULK LISTING GENERATOR PAGE ═══ -->
         <div class="page-panel" id="page-bulk">
           <div class="tool-header">
-            <div class="tool-header-icon" style="background: var(--dash-purple-light); color: var(--dash-purple);">
+            <div class="tool-header-icon" style="background: rgba(168,85,247,0.12); color: #e879f9;">
               <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
             </div>
             <div class="tool-header-text">
-              <h2>Bulk Optimization</h2>
-              <p>Optimize multiple product listings at once — paste product data and let AI do the rest</p>
+              <h2>Bulk Listing Generator</h2>
+              <p>Generate titles, keywords &amp; tags for multiple products at once</p>
             </div>
           </div>
 
           <div class="dash-card">
-            <div class="dash-card-title">📋 Bulk Product Data</div>
+            <div class="dash-card-title"><span class="card-icon">📋</span> Bulk Product Data</div>
             <div class="dash-input-group">
-              <label class="dash-label">Paste Product Titles (one per line)</label>
-              <textarea class="dash-textarea" id="bulk-products" style="min-height: 180px;" placeholder="Men's Cotton T-Shirt Blue Round Neck&#10;Women Kurti Rayon Printed Anarkali&#10;Kid's School Bag Waterproof Large..."></textarea>
+              <label class="dash-label">Paste Product Seeds (one per line)</label>
+              <textarea class="dash-textarea" id="bulk-products" placeholder="red kurti | rayon | printed | festive&#10;blue t-shirt | cotton | oversized | men&#10;steel bottle | 1 litre | leakproof | gym"></textarea>
             </div>
             <div class="dash-input-group">
-              <label class="dash-label">Optimization Focus</label>
+              <label class="dash-label">Output Focus</label>
               <select class="dash-select" id="bulk-focus">
-                <option value="titles">Title Optimization</option>
-                <option value="seo">SEO Keywords</option>
-                <option value="pricing">Pricing Suggestions</option>
-                <option value="all">Full Analysis</option>
+                <option value="titles">Title-led</option>
+                <option value="seo">SEO-heavy</option>
+                <option value="catalog">Catalog cleanup</option>
+                <option value="all">Full listing pack</option>
               </select>
             </div>
-            <button class="dash-btn-run" id="btn-run-bulk" style="width: 100%; margin-top: 8px;">
-              ⚡ Run Bulk Optimization — 1 Credit per product
+            <button class="dash-btn-run full-width" id="btn-run-bulk">
+              <span class="btn-icon">⚡</span>
+              Generate Bulk — 1 Credit per product
             </button>
           </div>
           <div class="result-box" id="result-bulk"></div>
@@ -390,12 +494,12 @@
         <!-- ═══ HISTORY PAGE ═══ -->
         <div class="page-panel" id="page-history">
           <div class="tool-header">
-            <div class="tool-header-icon" style="background: var(--dash-primary-light); color: var(--dash-primary);">
+            <div class="tool-header-icon" style="background: rgba(124,58,237,0.12); color: #c4b5fd;">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
             <div class="tool-header-text">
               <h2>History</h2>
-              <p>View all past analyses and optimization results</p>
+              <p>View all past analyses and results</p>
             </div>
           </div>
 
@@ -406,22 +510,57 @@
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 </div>
                 <h3>No history yet</h3>
-                <p>Your analysis results will appear here after you run your first optimization</p>
+                <p>Your results will appear here after you run your first optimization</p>
               </div>
             </div>
           </div>
         </div>
 
       </div><!-- /content-area -->
+
+      <section class="payment-drawer" id="payment-drawer" aria-hidden="true">
+        <div class="payment-drawer-backdrop" id="payment-drawer-backdrop"></div>
+        <div class="payment-drawer-panel">
+          <div class="payment-drawer-header">
+            <div>
+              <div class="payment-drawer-eyebrow">Secure Checkout</div>
+              <h2 id="payment-drawer-title">Choose Your Plan</h2>
+              <p id="payment-drawer-subtitle">Select a plan, pay, and continue working — all in one place.</p>
+            </div>
+            <button class="payment-drawer-close" id="payment-drawer-close" type="button" aria-label="Close checkout">✕</button>
+          </div>
+
+          <div class="payment-drawer-body" id="payment-plans-view">
+            <div class="payment-inline-card">
+              <label class="payment-label" for="payment-phone-input">WhatsApp Number</label>
+              <div class="payment-phone-row">
+                <span class="payment-phone-prefix">+91</span>
+                <input class="payment-phone-input" id="payment-phone-input" type="tel" maxlength="10" inputmode="numeric" placeholder="Enter 10-digit number">
+              </div>
+              <p class="payment-helper">Support and purchase updates can be shared on this number if needed.</p>
+            </div>
+
+            <div class="payment-inline-card">
+              <div class="payment-section-head">
+                <span class="payment-section-title">Choose Your Plan</span>
+                <span class="payment-section-note">Unlock all AI tools</span>
+              </div>
+              <div class="payment-plan-list" id="payment-plan-list"></div>
+            </div>
+
+            <div class="payment-status" id="payment-status">Pick a plan to start checkout.</div>
+          </div>
+        </div>
+      </section>
     </main>
   </div><!-- /dashboard-shell -->
 
-  <!-- Login Overlay (shown if not logged in) -->
+  <!-- Login Overlay -->
   <div class="login-overlay hidden" id="login-overlay">
     <div class="login-card">
-      <h2>🔒 Please Sign In</h2>
+      <h2>🔒 Sign In Required</h2>
       <p>Open the AI Listing Pro popup and sign in with Google to access the dashboard.</p>
-      <button class="dash-btn dash-btn-primary dash-btn-lg" id="btn-login-redirect">Open Extension Popup</button>
+      <button class="dash-btn dash-btn-primary dash-btn-lg" id="btn-login-redirect">Open Extension</button>
     </div>
   </div>
 

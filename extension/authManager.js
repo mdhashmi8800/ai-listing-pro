@@ -813,7 +813,7 @@ const CreditsManager = {
             const userId = session.user.id;
 
             const { data, error } = await supabase
-                .from('users')
+                .from('profiles')
                 .select('credits')
                 .eq('id', userId)
                 .single();

@@ -9,9 +9,9 @@
 const CREATE_ORDER_URL =
     "https://zxborvqzttyofyrksznw.supabase.co/functions/v1/create-order";
 
-// Supabase Edge Function - Verify Payment
+// Vercel Serverless Function - Verify Payment
 const VERIFY_PAYMENT_URL =
-    "https://zxborvqzttyofyrksznw.supabase.co/functions/v1/verify-payment";
+    "https://meesho-ai-tool.vercel.app/api/verify-payment";
 
 // Hosted checkout page (Vercel)
 const CHECKOUT_URL = "https://meesho-ai-tool.vercel.app/checkout.html";

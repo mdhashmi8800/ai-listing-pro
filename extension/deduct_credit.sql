@@ -7,7 +7,7 @@
 --  Run this SQL in your Supabase SQL Editor to create the function.
 --
 --  Prerequisites:
---    1. A "users" table with columns: id (uuid PK), credits (int),
+--    1. A "profiles" table with columns: id (uuid PK), credits (int),
 --       unlimited_until (timestamptz), is_banned (bool), updated_at (timestamptz)
 --    2. A "credit_transactions" table with columns:
 --         user_id (uuid), delta (int), reason (text)
@@ -27,7 +27,7 @@ DECLARE
 BEGIN
   -- Atomic deduct: only succeeds when balance is sufficient,
   -- the user is not banned, and not in an unlimited period.
-  UPDATE public.users
+  UPDATE public.profiles
   SET
     credits    = credits - amount,
     updated_at = NOW()
@@ -42,7 +42,7 @@ BEGIN
     -- Determine the specific reason for failure
     SELECT credits, unlimited_until, is_banned
       INTO v_credits, v_unlimited, v_banned
-      FROM public.users
+      FROM public.profiles
      WHERE id = v_user_id;
 
     IF v_banned THEN

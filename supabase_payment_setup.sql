@@ -1,7 +1,7 @@
 -- Create payments table to log Razorpay transactions
 CREATE TABLE IF NOT EXISTS public.payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     amount DECIMAL NOT NULL,
     currency TEXT DEFAULT 'INR',
     credits_added INTEGER NOT NULL,
@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS public.payments (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add first_purchase flag to users if not present to handle bonus logic
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS first_purchase BOOLEAN DEFAULT TRUE;
+-- Add first_purchase flag to profiles if not present to handle bonus logic
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_purchase BOOLEAN DEFAULT TRUE;
 
 -- Row Level Security for payments table
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;

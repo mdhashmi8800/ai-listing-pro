@@ -4,8 +4,30 @@
     <meta charset="UTF-8">
     <title>Payment</title>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+        #razorpay-container {
+            width: 100%;
+            height: 100%;
+        }
+        /* Razorpay embedded form fills the iframe */
+        .razorpay-container iframe,
+        #razorpay-container iframe {
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+        }
+    </style>
 </head>
 <body>
+<div id="razorpay-container"></div>
 <script>
     /* Allowed origins for postMessage */
     const ALLOWED_ORIGINS = [
@@ -15,12 +37,13 @@
     ];
 
     function safePostToParent(data) {
-        /* When opened as chrome-extension:// the parent origin is known */
         try { window.parent.postMessage(data, '*'); } catch(e) { console.error('postMessage error', e); }
     }
 
     /* Tell parent that iframe is ready */
     safePostToParent({ type: "RZP_IFRAME_READY" });
+
+    let currentRzp = null;
 
     window.addEventListener("message", function (event) {
         /* Validate origin — accept extension origin or known hosts */
@@ -32,6 +55,16 @@
         }
 
         if (!event.data || event.data.type !== "START_PAYMENT") return;
+
+        /* Destroy previous instance if any */
+        if (currentRzp) {
+            try { currentRzp.close(); } catch(_) {}
+            currentRzp = null;
+        }
+
+        /* Clear container for fresh render */
+        const container = document.getElementById('razorpay-container');
+        container.innerHTML = '';
 
         const options = {
             key: event.data.key,
@@ -50,12 +83,19 @@
             modal: {
                 ondismiss: function () {
                     safePostToParent({ type: "PAYMENT_CANCELLED" });
-                }
-            }
+                },
+                /* Prevent escape key from closing */
+                escape: false,
+                /* Prevent backdrop click from closing */
+                backdropclose: false
+            },
+
+            /* Prefill phone if provided */
+            prefill: event.data.phone ? { contact: '+91' + event.data.phone } : {}
         };
 
-        const rzp = new Razorpay(options);
-        rzp.open();
+        currentRzp = new Razorpay(options);
+        currentRzp.open();
     });
 </script>
 </body>

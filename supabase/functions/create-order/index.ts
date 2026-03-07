@@ -51,6 +51,16 @@ Deno.serve(async (req) => {
 
     const auth = btoa(`${keyId}:${keySecret}`);
 
+    // Build notes for Razorpay order (passed through to verify-payment)
+    const notes: Record<string, string> = {};
+    if (body.plan_id) {
+      notes.plan_id = String(body.plan_id);
+      notes.plan = String(body.plan_id);
+    }
+    if (body.user_id) notes.user_id = String(body.user_id);
+    if (body.phone) notes.phone = String(body.phone);
+    if (body.duration_days) notes.duration_days = String(body.duration_days);
+
     try {
         const razorpayRes = await fetch("https://api.razorpay.com/v1/orders", {
             method: "POST",
@@ -61,6 +71,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
                 amount: Math.round(amount * 100), // Razorpay expects paise
                 currency: "INR",
+                notes,
             }),
         });
 

@@ -1,5 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from "../_shared/cors.ts"
 
 const RAZORPAY_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET')
@@ -27,7 +25,7 @@ async function verifySignature(orderId: string, paymentId: string, signature: st
     return generatedSignature === signature;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
@@ -40,7 +38,9 @@ serve(async (req) => {
             user_id,
             plan_type,
             credits_to_add,
-            amount
+            amount,
+            duration_days,
+            phone
         } = await req.json()
 
         // 1. Verify Signature
@@ -54,17 +54,76 @@ serve(async (req) => {
         }
 
         // 2. Initialize Supabase Admin Client
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
         const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!)
 
-        // 3. Get User to check first_purchase bonus
+        // 3. Get User from profiles table
         const { data: user, error: userError } = await supabase
-            .from('users')
+            .from('profiles')
             .select('credits, first_purchase')
             .eq('id', user_id)
             .single()
 
         if (userError || !user) throw new Error('User not found')
 
+        // 4. Handle subscription-based plans (duration_days present)
+        if (duration_days && Number(duration_days) > 0) {
+            const durationDays = Number(duration_days)
+            const startDate = new Date()
+            const endDate = new Date(startDate.getTime() + durationDays * 24 * 60 * 60 * 1000)
+
+            // Insert subscription record
+            const { error: subError } = await supabase
+                .from('subscriptions')
+                .insert({
+                    user_id,
+                    plan_name: plan_type || 'trial',
+                    status: 'active',
+                    start_date: startDate.toISOString(),
+                    end_date: endDate.toISOString(),
+                    razorpay_payment_id,
+                    razorpay_order_id,
+                    amount: amount || 0,
+                    phone: phone || null
+                })
+
+            if (subError) {
+                console.error('Subscription insert error:', subError)
+                throw new Error('Failed to create subscription')
+            }
+
+            // Update user plan
+            await supabase
+                .from('profiles')
+                .update({ plan: plan_type || 'trial', updated_at: new Date().toISOString() })
+                .eq('id', user_id)
+
+            // Log payment
+            await supabase.from('payments').insert({
+                user_id,
+                amount: amount || 0,
+                credits_added: 0,
+                razorpay_order_id,
+                razorpay_payment_id,
+                razorpay_signature,
+                status: 'captured'
+            })
+
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    subscription: true,
+                    plan: plan_type,
+                    end_date: endDate.toISOString()
+                }),
+                {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                    status: 200
+                }
+            )
+        }
+
+        // 5. Handle credit-based plans (credits_to_add present)
         let finalCreditsToAdd = parseInt(credits_to_add, 10)
         if (!Number.isFinite(finalCreditsToAdd) || finalCreditsToAdd <= 0) {
             return new Response(JSON.stringify({ error: 'Invalid credits_to_add' }), {
@@ -79,12 +138,9 @@ serve(async (req) => {
             finalCreditsToAdd += 25
         }
 
-        // 4. Atomic Transaction: Update credits and log payment
-        // We update user and insert payment record
-
-        // Update credits
+        // 6. Update credits in profiles table
         const { error: updateError } = await supabase
-            .from('users')
+            .from('profiles')
             .update({
                 credits: user.credits + finalCreditsToAdd,
                 first_purchase: false,
@@ -109,7 +165,6 @@ serve(async (req) => {
 
         if (paymentError) {
             console.error('Payment log error:', paymentError)
-            // Note: Credits are already added, we might want to log this failure somewhere
         }
 
         // Log transaction

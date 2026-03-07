@@ -255,7 +255,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function fetchSubscription(userId, token) {
     try {
       const response = await bgFetch(
-        `${CONFIG.SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=*&order=expires_at.desc&limit=1`,
+        `${CONFIG.SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=*&order=end_date.desc&limit=1`,
         {
           headers: {
             'apikey': CONFIG.SUPABASE_ANON_KEY,
@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           // Check subscription status
           const subscription = await fetchSubscription(user.id, token);
 
-          if (subscription && new Date(subscription.expires_at) > new Date()) {
+          if (subscription && new Date(subscription.end_date) > new Date()) {
             // STATE 3: Subscribed
             showSubscribedState(user, subscription);
             headerBadge.textContent = 'PRO';
@@ -391,12 +391,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       planName.textContent = subscription.plan_name || 'Active';
       planName.className = 'sub-value active';
 
-      expiry.textContent = formatDate(subscription.expires_at);
-      const rem = getRemainingTime(subscription.expires_at);
+      expiry.textContent = formatDate(subscription.end_date);
+      const rem = getRemainingTime(subscription.end_date);
       remaining.textContent = rem;
 
       // Warn if less than 3 days remaining
-      const daysLeft = (new Date(subscription.expires_at) - new Date()) / (1000 * 60 * 60 * 24);
+      const daysLeft = (new Date(subscription.end_date) - new Date()) / (1000 * 60 * 60 * 24);
       if (daysLeft <= 3) {
         remaining.className = 'sub-value expiring';
       }
@@ -415,8 +415,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ════════════════════════════════════════════════════════════
-  //  PAYMENT: Razorpay via checkout window
+  //  PAYMENT: Razorpay checkout inline (inside popup iframe)
   // ════════════════════════════════════════════════════════════
+  let pricingPaymentContext = null; // Track payment for verification
+
   async function startPayment(plan) {
     try {
       const stored = await chrome.storage.local.get(['user']);
@@ -434,6 +436,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         phoneInput?.focus();
         return;
       }
+
+      showMessage('Creating order...', 'info');
 
       const res = await bgFetch(CONFIG.CREATE_ORDER_URL, {
         method: "POST",
@@ -454,29 +458,35 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!res.ok) throw new Error("Order creation failed");
       const order = await res.json();
 
+      // Save payment context for verification after checkout
+      pricingPaymentContext = {
+        orderId: order.id,
+        amount: order.amount,
+        phone: phone,
+        plan: plan,
+        user: stored.user,
+        token: token
+      };
+
       const checkoutUrl =
         CONFIG.CHECKOUT_URL +
         "?order_id=" + order.id +
         "&amount=" + order.amount +
+        "&key=" + encodeURIComponent(CONFIG.RAZORPAY_KEY_ID) +
         "&user_id=" + encodeURIComponent(stored.user.id) +
-        "&plan_type=" + encodeURIComponent(plan.id) +
+        "&plan=" + encodeURIComponent(plan.id) +
         "&phone=" + encodeURIComponent(phone) +
         "&duration_days=" + encodeURIComponent(plan.duration_days);
 
-      chrome.windows.create({
-        url: checkoutUrl,
-        type: "popup",
-        width: 420,
-        height: 720
-      }, (win) => {
-        if (!win) return;
-        const onRemoved = (windowId) => {
-          if (windowId !== win.id) return;
-          chrome.windows.onRemoved.removeListener(onRemoved);
-          pollSubscriptionAfterPayment(stored.user, token);
-        };
-        chrome.windows.onRemoved.addListener(onRemoved);
-      });
+      // Open checkout inside the same popup using the dashboard iframe
+      const dView = document.getElementById('dashboard-view');
+      const dIframe = document.getElementById('dashboard-iframe');
+      const appCont = document.getElementById('app');
+
+      savedDashboardUrl = ''; // No dashboard to restore — came from pricing
+      dIframe.src = checkoutUrl;
+      appCont.classList.add('hidden');
+      dView.classList.remove('hidden');
 
       showMessage("Opening secure checkout...", "info");
 
@@ -495,7 +505,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       attempts++;
       try {
         const sub = await fetchSubscription(user.id, token);
-        if (sub && new Date(sub.expires_at) > new Date()) {
+        if (sub && new Date(sub.end_date) > new Date()) {
           clearInterval(poll);
           showMessage('Payment successful! Subscription activated.', 'success');
           showSubscribedState(user, sub);
@@ -536,9 +546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('.tool-card').forEach(card => {
     card.addEventListener('click', () => {
       const tool = card.dataset.tool;
-      const dashboardUrl = chrome.runtime.getURL('dashboard.html') + (tool ? `#${tool}` : '');
-      chrome.tabs.create({ url: dashboardUrl });
-      window.close();
+      openDashboardInPopup(tool ? `#${tool}` : '');
     });
   });
 
@@ -548,10 +556,116 @@ document.addEventListener('DOMContentLoaded', async () => {
   const openDashboardBtn = document.getElementById('open-dashboard-btn');
   if (openDashboardBtn) {
     openDashboardBtn.addEventListener('click', () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-      window.close();
+      openDashboardInPopup();
     });
   }
+
+  // ════════════════════════════════════════════════════════════
+  //  DASHBOARD VIEW SWITCHING (iframe inside popup)
+  // ════════════════════════════════════════════════════════════
+  const dashboardView = document.getElementById('dashboard-view');
+  const dashboardIframe = document.getElementById('dashboard-iframe');
+  const dashboardBackBtn = document.getElementById('dashboard-back-btn');
+  const appContainer = document.getElementById('app');
+
+  let savedDashboardUrl = '';  // Remember dashboard URL for restoring after checkout
+
+  function openDashboardInPopup(hash = '') {
+    const url = chrome.runtime.getURL('dashboard.html') + hash;
+    dashboardIframe.src = url;
+    savedDashboardUrl = url;
+    appContainer.classList.add('hidden');
+    dashboardView.classList.remove('hidden');
+  }
+
+  if (dashboardBackBtn) {
+    dashboardBackBtn.addEventListener('click', () => {
+      dashboardView.classList.add('hidden');
+      appContainer.classList.remove('hidden');
+      dashboardIframe.src = '';
+      savedDashboardUrl = '';
+      pricingPaymentContext = null;
+    });
+  }
+
+  // ── Checkout flow: dashboard sends OPEN_CHECKOUT, we swap the iframe ──
+  const CHECKOUT_ORIGIN = 'https://meesho-ai-tool.vercel.app';
+
+  window.addEventListener('message', (event) => {
+    if (!event.data?.type) return;
+
+    // Only accept messages from our extension pages or the checkout origin
+    const fromExtension = event.origin.startsWith('chrome-extension://');
+    const fromCheckout = event.origin === CHECKOUT_ORIGIN;
+    if (!fromExtension && !fromCheckout) return;
+
+    // Dashboard requests to open checkout page
+    if (event.data.type === 'OPEN_CHECKOUT' && event.data.url) {
+      savedDashboardUrl = dashboardIframe.src || savedDashboardUrl;
+      dashboardIframe.src = event.data.url;
+      return;
+    }
+
+    // Checkout page reports payment success — forward to dashboard & restore
+    if (event.data.type === 'PAYMENT_SUCCESS') {
+      const paymentData = event.data.data || {};
+
+      // If checkout was opened from pricing section (no savedDashboardUrl),
+      // close the iframe view, restore app view and poll for subscription
+      if (!savedDashboardUrl) {
+        dashboardIframe.src = '';
+        dashboardView.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+
+        if (pricingPaymentContext) {
+          showMessage('Payment successful! Verifying...', 'success');
+          pollSubscriptionAfterPayment(pricingPaymentContext.user, pricingPaymentContext.token);
+          pricingPaymentContext = null;
+        } else {
+          showMessage('Payment successful! Subscription will update shortly.', 'success');
+        }
+        return;
+      }
+
+      // Restore dashboard
+      dashboardIframe.src = savedDashboardUrl;
+      // Forward result to dashboard iframe once it loads
+      dashboardIframe.addEventListener('load', function onLoad() {
+        dashboardIframe.removeEventListener('load', onLoad);
+        setTimeout(() => {
+          dashboardIframe.contentWindow?.postMessage({
+            type: 'PAYMENT_SUCCESS',
+            data: paymentData,
+          }, '*');
+        }, 500);
+      });
+      return;
+    }
+
+    // Checkout page reports payment cancelled — restore dashboard or pricing
+    if (event.data.type === 'PAYMENT_CANCELLED') {
+      // If checkout was opened from pricing section, just go back to app view
+      if (!savedDashboardUrl) {
+        dashboardIframe.src = '';
+        dashboardView.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+        showMessage('Payment cancelled. You can choose another plan.', 'info');
+        pricingPaymentContext = null;
+        return;
+      }
+
+      dashboardIframe.src = savedDashboardUrl;
+      dashboardIframe.addEventListener('load', function onLoad() {
+        dashboardIframe.removeEventListener('load', onLoad);
+        setTimeout(() => {
+          dashboardIframe.contentWindow?.postMessage({
+            type: 'PAYMENT_CANCELLED',
+          }, '*');
+        }, 500);
+      });
+      return;
+    }
+  });
 
   // ════════════════════════════════════════════════════════════
   //  LOGOUT (both logged-in sections)

@@ -11,10 +11,22 @@ export default async function handler(req, res) {
   });
 
   try {
+    const { amount, plan_id, user_id, phone, duration_days } = req.body;
+
+    const notes = {};
+    if (plan_id) {
+      notes.plan_id = String(plan_id);
+      notes.plan = String(plan_id);
+    }
+    if (user_id) notes.user_id = String(user_id);
+    if (phone) notes.phone = String(phone);
+    if (duration_days) notes.duration_days = String(duration_days);
+
     const options = {
-      amount: req.body.amount * 100,
+      amount: amount * 100,
       currency: "INR",
       receipt: "receipt_" + Date.now(),
+      notes,
     };
 
     const order = await razorpay.orders.create(options);
