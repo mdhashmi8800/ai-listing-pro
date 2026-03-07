@@ -496,6 +496,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Call verify-payment API to insert records into Supabase
+  async function verifyPaymentOnServer(paymentData, context) {
+    try {
+      const res = await bgFetch(CONFIG.VERIFY_PAYMENT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': CONFIG.SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${context.token}`,
+        },
+        body: JSON.stringify({
+          razorpay_payment_id: paymentData.razorpay_payment_id,
+          razorpay_order_id: paymentData.razorpay_order_id,
+          razorpay_signature: paymentData.razorpay_signature,
+          user_id: context.user.id,
+          plan: context.plan.id,
+          plan_type: context.plan.id,
+          amount: context.plan.price,
+          duration_days: context.plan.duration_days,
+          phone: context.phone,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('[POPUP] verify-payment failed:', errText);
+        return false;
+      }
+
+      const result = await res.json();
+      console.log('[POPUP] verify-payment result:', result);
+      return result.success === true;
+    } catch (err) {
+      console.error('[POPUP] verify-payment error:', err);
+      return false;
+    }
+  }
+
   // Poll for subscription after payment
   async function pollSubscriptionAfterPayment(user, token) {
     let attempts = 0;
@@ -591,7 +629,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Checkout flow: dashboard sends OPEN_CHECKOUT, we swap the iframe ──
   const CHECKOUT_ORIGIN = 'https://meesho-ai-tool.vercel.app';
 
-  window.addEventListener('message', (event) => {
+  window.addEventListener('message', async (event) => {
     if (!event.data?.type) return;
 
     // Only accept messages from our extension pages or the checkout origin
@@ -611,17 +649,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       const paymentData = event.data.data || {};
 
       // If checkout was opened from pricing section (no savedDashboardUrl),
-      // close the iframe view, restore app view and poll for subscription
+      // call verify-payment API, then close iframe and poll for subscription
       if (!savedDashboardUrl) {
-        dashboardIframe.src = '';
-        dashboardView.classList.add('hidden');
-        appContainer.classList.remove('hidden');
-
         if (pricingPaymentContext) {
           showMessage('Payment successful! Verifying...', 'success');
-          pollSubscriptionAfterPayment(pricingPaymentContext.user, pricingPaymentContext.token);
+          // Call verify-payment BEFORE killing the iframe
+          const verified = await verifyPaymentOnServer(paymentData, pricingPaymentContext);
+          const ctx = pricingPaymentContext;
           pricingPaymentContext = null;
+
+          dashboardIframe.src = '';
+          dashboardView.classList.add('hidden');
+          appContainer.classList.remove('hidden');
+
+          if (verified) {
+            showMessage('Payment verified! Subscription activated.', 'success');
+            // Refresh UI to show PRO state
+            setTimeout(() => checkLoginStatus(), 1000);
+          } else {
+            // Fallback: poll for subscription in case webhook or checkout.html handled it
+            pollSubscriptionAfterPayment(ctx.user, ctx.token);
+          }
         } else {
+          dashboardIframe.src = '';
+          dashboardView.classList.add('hidden');
+          appContainer.classList.remove('hidden');
           showMessage('Payment successful! Subscription will update shortly.', 'success');
         }
         return;

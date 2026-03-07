@@ -84,6 +84,12 @@
             description: planName,
             order_id: orderId,
 
+            notes: {
+                user_id: userId,
+                plan: planId,
+                duration_days: durationDays
+            },
+
             handler: async function (response) {
                 if (statusEl) {
                     statusEl.textContent = 'Payment successful! Verifying...';
