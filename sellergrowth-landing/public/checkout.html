@@ -64,6 +64,7 @@
     const userId = params.get('user_id') || '';
     const planId = params.get('plan') || params.get('plan_id') || '';
     const durationDays = params.get('duration_days') || '';
+    const creditsToAdd = params.get('credits_to_add') || '';
     const statusEl = document.getElementById('status-msg');
     const planLabel = document.getElementById('plan-label');
 
@@ -89,7 +90,8 @@
             notes: {
                 user_id: userId,
                 plan: planId,
-                duration_days: durationDays
+                duration_days: durationDays,
+                credits_to_add: creditsToAdd
             },
 
             handler: async function (response) {
@@ -100,19 +102,25 @@
 
                 // Call verify-payment API directly
                 try {
-                    const verifyRes = await fetch('/api/verify-payment', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
+                    const verifyBody = {
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_signature: response.razorpay_signature,
                             user_id: userId,
                             plan: planId,
-                            duration_days: durationDays,
                             amount: parseInt(amount, 10) / 100,
                             phone: phone
-                        })
+                        };
+                    if (creditsToAdd) {
+                        verifyBody.credits_to_add = parseInt(creditsToAdd, 10);
+                    } else {
+                        verifyBody.duration_days = durationDays;
+                    }
+
+                    const verifyRes = await fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(verifyBody)
                     });
                     const result = await verifyRes.json();
                     if (result.success) {

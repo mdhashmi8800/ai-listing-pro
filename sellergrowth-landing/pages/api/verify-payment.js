@@ -106,7 +106,7 @@ export default async function handler(req, res) {
       // Get current user profile
       const { data: profile, error: profileErr } = await supabase
         .from("profiles")
-        .select("credits, first_purchase")
+        .select("credits")
         .eq("id", user_id)
         .single();
 
@@ -120,11 +120,7 @@ export default async function handler(req, res) {
       // Update credits in profiles
       const { error: updateErr } = await supabase
         .from("profiles")
-        .update({
-          credits: newBalance,
-          first_purchase: false,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ credits: newBalance })
         .eq("id", user_id);
 
       if (updateErr) {
@@ -201,13 +197,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to save subscription" });
     }
 
-    // 2. Update user plan in profiles
-    await supabase
-      .from("profiles")
-      .update({ plan: planName, updated_at: new Date().toISOString() })
-      .eq("id", user_id);
-
-    // 3. Insert payment record
+    // 2. Insert payment record
     await supabase.from("payments").upsert(
       {
         user_id,
