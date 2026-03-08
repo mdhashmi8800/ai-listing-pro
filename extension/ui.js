@@ -170,41 +170,42 @@ const UI = {
         `;
     },
 
-    // Buy Credits Modal — New Pricing Plans (NO Unlimited)
+    // Buy Credits Modal — Hybrid: Subscription + Credit Packs
     getBuyCreditsHTML: function () {
-        const starter = CONFIG.PRICING.STARTER;
-        const growth = CONFIG.PRICING.GROWTH;
-        const pro = CONFIG.PRICING.PRO;
+        const subPlans = CONFIG.SUBSCRIPTION_PLANS || {};
+        const creditPacks = CONFIG.CREDIT_PACKS || {};
+        const planOrder = ['trial', 'monthly', 'quarterly', 'half_yearly', 'yearly'];
 
-        const checkSvg = `<svg class="feature-icon" width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>`;
-
-        const renderCard = (plan, extraClass = '') => {
-            const badgeHTML = plan.badge
-                ? `<div class="plan-badge ${plan.popular ? 'badge-popular' : 'badge-power'}">${plan.badge}</div>`
-                : '';
-            const priceLabel = plan.oneTime ? 'One-time' : '/month · Auto-renew';
+        const subCards = planOrder.map(key => {
+            const plan = subPlans[key];
+            if (!plan) return '';
+            const isHighlight = key === 'yearly';
             return `
-                <div class="pricing-card-modern ${plan.popular ? 'featured' : ''} ${extraClass}">
-                    ${badgeHTML}
-                    <div class="card-icon-badge">${plan.popular ? '🚀' : plan.oneTime ? '⚡' : '💎'}</div>
-                    <h3 class="card-title">${plan.name}</h3>
-                    <div class="card-tagline">${plan.tagline}</div>
-                    <div class="card-price-section">
-                        <div class="card-price-main">
-                            <span class="currency">₹</span>
-                            <span class="amount">${plan.price}</span>
-                        </div>
-                        <div class="card-price-sub">${priceLabel}</div>
+                <div class="pricing-card-modern ${isHighlight ? 'featured' : ''}" style="padding:14px;margin-bottom:8px;cursor:pointer;" data-plan="${plan.id}" data-plan-type="subscription">
+                    ${isHighlight ? '<div class="plan-badge badge-popular">Best Value</div>' : ''}
+                    <h3 class="card-title" style="font-size:14px;margin:0 0 2px;">${plan.name}</h3>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">${plan.duration_days} Days · All tools unlimited</div>
+                    <div class="card-price-section" style="margin:0;">
+                        <span style="font-size:20px;font-weight:800;color:#a78bfa;">₹${plan.price}</span>
                     </div>
-                    <div class="card-features">
-                        ${plan.features.map(f => `<div class="feature-item">${checkSvg}<span>${f}</span></div>`).join('')}
-                    </div>
-                    <button class="card-btn ${plan.popular ? 'featured-btn' : 'standard-btn'} buy-btn" data-plan="${plan.id}">
-                        ${plan.popular ? 'Get Growth Plan' : plan.oneTime ? 'Get Started' : 'Subscribe Pro'}
-                    </button>
                 </div>
             `;
-        };
+        }).join('');
+
+        const creditCards = Object.values(creditPacks).map(pack => {
+            const isHighlight = Boolean(pack.badge);
+            return `
+                <div class="pricing-card-modern ${isHighlight ? 'featured' : ''}" style="padding:14px;margin-bottom:8px;cursor:pointer;" data-plan="${pack.id}" data-plan-type="credits">
+                    ${isHighlight ? `<div class="plan-badge badge-popular">${pack.badge}</div>` : ''}
+                    <h3 class="card-title" style="font-size:14px;margin:0 0 2px;">${pack.name}</h3>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">${pack.credits} credits · No expiry</div>
+                    <div class="card-price-section" style="margin:0;">
+                        <span style="font-size:20px;font-weight:800;color:#10b981;">₹${pack.price}</span>
+                        <span style="font-size:10px;color:#10b981;margin-left:4px;">₹${(pack.price / pack.credits).toFixed(2)}/credit</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
 
         return `
             <div class="modal-content buy-modal-modern">
@@ -220,26 +221,27 @@ const UI = {
                         <div class="header-icon">💎</div>
                     </div>
                     <h2 class="buy-modal-title">Choose Your Plan</h2>
-                    <p class="buy-modal-subtitle">Affordable pricing. No hidden limits. Powered by Ultra-Fast AI.</p>
+                    <p class="buy-modal-subtitle">Subscribe for unlimited access, or buy credit packs</p>
                 </div>
 
-                <!-- Free plan reminder -->
-                <div class="free-plan-reminder">
-                    <span>🎁</span>
-                    <span>Free plan: <strong>${CONFIG.DEFAULT_SIGNUP_CREDITS} credits on signup</strong></span>
+                <div style="display:flex;gap:4px;margin-bottom:12px;background:rgba(30,41,59,0.5);border-radius:8px;padding:3px;">
+                    <button class="buy-tab-btn active" data-tab="sub" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#7c3aed;color:#fff;font-family:inherit;">⚡ Subscription</button>
+                    <button class="buy-tab-btn" data-tab="credits" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:#94a3b8;font-family:inherit;">💳 Credit Packs</button>
                 </div>
 
-                <div class="pricing-grid">
-                    ${renderCard(starter)}
-                    ${renderCard(growth, 'popular-card')}
-                    ${renderCard(pro)}
+                <div class="buy-tab-content" id="buy-tab-sub">
+                    ${subCards}
+                </div>
+
+                <div class="buy-tab-content" id="buy-tab-credits" style="display:none;">
+                    ${creditCards}
                 </div>
 
                 <div class="payment-footer">
-                    <div class="payment-icon">💬</div>
+                    <div class="payment-icon">🔒</div>
                     <div class="payment-text">
-                        <div class="payment-title">Quick &amp; Easy Payment via Razorpay</div>
-                        <div class="payment-subtitle">Credits added instantly after verified payment</div>
+                        <div class="payment-title">Secure UPI Payment via Razorpay</div>
+                        <div class="payment-subtitle">Activated instantly after payment</div>
                     </div>
                 </div>
             </div>

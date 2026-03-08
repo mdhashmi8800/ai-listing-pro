@@ -375,6 +375,27 @@
     .phone-input:focus { border-color: var(--primary); }
     .phone-input::placeholder { color: var(--text-muted); }
 
+    /* Tab toggle */
+    .popup-tab-toggle {
+      display: flex; gap: 4px; margin-bottom: 12px;
+      background: var(--surface-2); border-radius: var(--radius-sm);
+      padding: 3px;
+    }
+    .popup-tab-btn {
+      flex: 1; padding: 8px 4px; border: none; background: none;
+      color: var(--text-muted); font-size: 11px; font-weight: 600;
+      border-radius: 6px; cursor: pointer; transition: var(--transition);
+      font-family: inherit;
+    }
+    .popup-tab-btn.active {
+      background: var(--primary); color: #fff;
+    }
+    .popup-tab-btn small {
+      display: block; font-size: 9px; font-weight: 400; opacity: 0.8;
+    }
+    .popup-tab-content { display: none; }
+    .popup-tab-content.active { display: block; }
+
     /* Plan cards */
     .plan-card {
       width: 100%; padding: 12px 14px;
@@ -435,6 +456,10 @@
     .plan-per {
       font-size: 9px; color: var(--text-muted);
       font-weight: 500; text-transform: uppercase;
+    }
+
+    .credit-per-credit {
+      font-size: 9px; color: var(--accent); font-weight: 500;
     }
 
     .upi-badge {
@@ -738,7 +763,7 @@
 
         <div class="pricing-header">
           <h2>Choose Your Plan</h2>
-          <p>Unlock all AI tools with a subscription</p>
+          <p>Subscribe for unlimited access, or buy credit packs</p>
         </div>
 
         <!-- Phone Input -->
@@ -749,63 +774,99 @@
             pattern="[0-9]{10}" inputmode="numeric">
         </div>
 
-        <!-- Plans -->
-        <div id="plans-container">
-          <button class="plan-card" data-plan="trial">
-            <div class="plan-left">
-              <div class="plan-name">Trial</div>
-              <div class="plan-duration">10 Days Access</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price">₹79</div>
-              <div class="plan-per">10 days</div>
-            </div>
-          </button>
+        <!-- Tab Toggle -->
+        <div class="popup-tab-toggle">
+          <button class="popup-tab-btn active" data-tab="subscriptions">⚡ Subscription<small>Unlimited</small></button>
+          <button class="popup-tab-btn" data-tab="credits">💳 Credit Packs<small>Pay per use</small></button>
+        </div>
 
-          <button class="plan-card" data-plan="monthly">
-            <div class="plan-left">
-              <div class="plan-name">Monthly</div>
-              <div class="plan-duration">30 Days Access</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price">₹299</div>
-              <div class="plan-per">per month</div>
-            </div>
-          </button>
+        <!-- Subscription Plans Tab -->
+        <div class="popup-tab-content active" id="tab-subscriptions">
+          <div id="plans-container">
+            <button class="plan-card" data-plan="trial" data-plan-type="subscription">
+              <div class="plan-left">
+                <div class="plan-name">Trial</div>
+                <div class="plan-duration">10 Days Access</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹79</div>
+                <div class="plan-per">10 days</div>
+              </div>
+            </button>
 
-          <button class="plan-card" data-plan="quarterly">
-            <div class="plan-left">
-              <div class="plan-name">3 Months</div>
-              <div class="plan-duration">90 Days Access</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price">₹899</div>
-              <div class="plan-per">3 months</div>
-            </div>
-          </button>
+            <button class="plan-card" data-plan="monthly" data-plan-type="subscription">
+              <div class="plan-left">
+                <div class="plan-name">Monthly</div>
+                <div class="plan-duration">30 Days Access</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹299</div>
+                <div class="plan-per">per month</div>
+              </div>
+            </button>
 
-          <button class="plan-card" data-plan="half_yearly">
-            <div class="plan-left">
-              <div class="plan-name">6 Months</div>
-              <div class="plan-duration">180 Days Access</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price">₹1499</div>
-              <div class="plan-per">6 months</div>
-            </div>
-          </button>
+            <button class="plan-card" data-plan="quarterly" data-plan-type="subscription">
+              <div class="plan-left">
+                <div class="plan-name">3 Months</div>
+                <div class="plan-duration">90 Days Access</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹899</div>
+                <div class="plan-per">3 months</div>
+              </div>
+            </button>
 
-          <button class="plan-card best-value" data-plan="yearly">
-            <div class="plan-badge">Best Value</div>
-            <div class="plan-left">
-              <div class="plan-name">Yearly</div>
-              <div class="plan-duration">365 Days Access</div>
-            </div>
-            <div class="plan-price-box">
-              <div class="plan-price">₹2099</div>
-              <div class="plan-per">per year</div>
-            </div>
-          </button>
+            <button class="plan-card" data-plan="half_yearly" data-plan-type="subscription">
+              <div class="plan-left">
+                <div class="plan-name">6 Months</div>
+                <div class="plan-duration">180 Days Access</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹1499</div>
+                <div class="plan-per">6 months</div>
+              </div>
+            </button>
+
+            <button class="plan-card best-value" data-plan="yearly" data-plan-type="subscription">
+              <div class="plan-badge">Best Value</div>
+              <div class="plan-left">
+                <div class="plan-name">Yearly</div>
+                <div class="plan-duration">365 Days Access</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹2099</div>
+                <div class="plan-per">per year</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Credit Packs Tab -->
+        <div class="popup-tab-content" id="tab-credits">
+          <div id="credit-packs-container">
+            <button class="plan-card" data-plan="credit_starter" data-plan-type="credits">
+              <div class="plan-left">
+                <div class="plan-name">Starter Pack</div>
+                <div class="plan-duration">50 Credits · No expiry</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹79</div>
+                <div class="credit-per-credit">₹1.58/credit</div>
+              </div>
+            </button>
+
+            <button class="plan-card best-value" data-plan="credit_growth" data-plan-type="credits">
+              <div class="plan-badge">Best Value</div>
+              <div class="plan-left">
+                <div class="plan-name">Growth Pack</div>
+                <div class="plan-duration">200 Credits · No expiry</div>
+              </div>
+              <div class="plan-price-box">
+                <div class="plan-price">₹149</div>
+                <div class="credit-per-credit">₹0.75/credit</div>
+              </div>
+            </button>
+          </div>
         </div>
 
         <div class="upi-badge">

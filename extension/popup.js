@@ -454,6 +454,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         amount: plan.price
       });
 
+      const isCreditPack = Boolean(plan.credits);
+
+      const orderBody = {
+        amount: plan.price,
+        plan_id: plan.id,
+        user_id: stored.user.id,
+        phone: phone,
+      };
+      if (isCreditPack) {
+        orderBody.credits_to_add = plan.credits;
+      } else {
+        orderBody.duration_days = plan.duration_days;
+      }
+
       const res = await bgFetch(CONFIG.CREATE_ORDER_URL, {
         method: "POST",
         headers: {
@@ -461,13 +475,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           "apikey": CONFIG.SUPABASE_ANON_KEY,
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({
-          amount: plan.price,
-          plan_id: plan.id,
-          user_id: stored.user.id,
-          phone: phone,
-          duration_days: plan.duration_days
-        })
+        body: JSON.stringify(orderBody)
       });
 
       if (!res.ok) throw new Error("Order creation failed");
@@ -480,18 +488,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         phone: phone,
         plan: plan,
         user: stored.user,
-        token: token
+        token: token,
+        isCreditPack: isCreditPack
       };
 
-      const checkoutUrl =
+      let checkoutUrl =
         CONFIG.CHECKOUT_URL +
         "?order_id=" + order.id +
         "&amount=" + order.amount +
         "&key=" + encodeURIComponent(CONFIG.RAZORPAY_KEY_ID) +
         "&user_id=" + encodeURIComponent(stored.user.id) +
         "&plan=" + encodeURIComponent(plan.id) +
-        "&phone=" + encodeURIComponent(phone) +
-        "&duration_days=" + encodeURIComponent(plan.duration_days);
+        "&phone=" + encodeURIComponent(phone);
+      if (isCreditPack) {
+        checkoutUrl += "&credits_to_add=" + encodeURIComponent(plan.credits);
+      } else {
+        checkoutUrl += "&duration_days=" + encodeURIComponent(plan.duration_days);
+      }
 
       // Open checkout inside the same popup using the dashboard iframe
       const dView = document.getElementById('dashboard-view');
@@ -529,7 +542,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           plan: context.plan.id,
           plan_type: context.plan.id,
           amount: context.plan.price,
-          duration_days: context.plan.duration_days,
+          duration_days: context.isCreditPack ? undefined : context.plan.duration_days,
+          credits_to_add: context.isCreditPack ? context.plan.credits : undefined,
           phone: context.phone,
         }),
       });
@@ -574,18 +588,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ════════════════════════════════════════════════════════════
-  //  PLAN BUTTON CLICKS
+  //  TAB TOGGLE
+  // ════════════════════════════════════════════════════════════
+  document.querySelectorAll('.popup-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.popup-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.popup-tab-content').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      const tabId = 'tab-' + btn.dataset.tab;
+      document.getElementById(tabId)?.classList.add('active');
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  //  PLAN BUTTON CLICKS (subscription + credit packs)
   // ════════════════════════════════════════════════════════════
   document.querySelectorAll('.plan-card').forEach(btn => {
     btn.addEventListener('click', async () => {
       const planId = btn.dataset.plan;
-      const plan = CONFIG.SUBSCRIPTION_PLANS?.[planId];
+      const planType = btn.dataset.planType;
+      let plan;
+
+      if (planType === 'credits') {
+        plan = Object.values(CONFIG.CREDIT_PACKS || {}).find(p => p.id === planId);
+      } else {
+        plan = CONFIG.SUBSCRIPTION_PLANS?.[planId];
+      }
       if (!plan) return;
 
       const stored = await chrome.storage.local.get(['user']);
       const token = await getAccessToken();
       if (!stored.user || !token) {
-        showMessage('Please login to subscribe', 'info');
+        showMessage('Please login first', 'info');
         return;
       }
 

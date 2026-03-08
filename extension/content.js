@@ -1092,14 +1092,29 @@ class MeeshoCreditsOptimizer {
             if (e.target === buyModal) buyModal.remove();
         };
 
-        // Buy plan buttons — use new plan ID system
-        document.querySelectorAll('.buy-btn').forEach(btn => {
+        // Tab toggle for buy modal
+        buyModal.querySelectorAll('.buy-tab-btn').forEach(btn => {
             btn.onclick = () => {
-                const planId = btn.dataset.plan;
-                const pricing = CONFIG.PRICING[planId?.toUpperCase()];
-                if (!pricing) return;
-                const message = `Hi! I want to buy ${pricing.name} plan for AI Listing Pro.\n\n💰 Price: ₹${pricing.price}\n💎 Credits: ${pricing.credits}${pricing.oneTime ? ' (one-time)' : '/month'}`;
-                window.open(`https://wa.me/${CONFIG.WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, '_blank');
+                buyModal.querySelectorAll('.buy-tab-btn').forEach(b => {
+                    b.style.background = 'none';
+                    b.style.color = '#94a3b8';
+                    b.classList.remove('active');
+                });
+                btn.style.background = '#7c3aed';
+                btn.style.color = '#fff';
+                btn.classList.add('active');
+                buyModal.querySelectorAll('.buy-tab-content').forEach(t => t.style.display = 'none');
+                const tabId = 'buy-tab-' + btn.dataset.tab;
+                const tabEl = document.getElementById(tabId);
+                if (tabEl) tabEl.style.display = 'block';
+            };
+        });
+
+        // Plan card clicks — open pricing page
+        buyModal.querySelectorAll('[data-plan]').forEach(card => {
+            card.onclick = () => {
+                window.open(CONFIG.PRICING_URL || 'https://meesho-ai-tool.vercel.app/#pricing', '_blank');
+                buyModal.remove();
             };
         });
     }
