@@ -49,6 +49,8 @@
     <div class="status-msg" id="status-msg">Initializing secure checkout...</div>
 </div>
 <script>
+    console.log("CHECKOUT VERSION 2 LOADED — sellergrowth-landing/public/checkout.html");
+
     function safePostToParent(data) {
         try { window.parent.postMessage(data, '*'); } catch(e) { console.error('postMessage error', e); }
     }

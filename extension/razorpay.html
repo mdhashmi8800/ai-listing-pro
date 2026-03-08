@@ -73,6 +73,12 @@
             name: "AI Listing Pro",
             order_id: event.data.order_id,
 
+            notes: {
+                user_id: event.data.user_id || '',
+                plan: event.data.plan || event.data.plan_id || '',
+                duration_days: event.data.duration_days || ''
+            },
+
             handler: function (response) {
                 safePostToParent({
                     type: "PAYMENT_SUCCESS",

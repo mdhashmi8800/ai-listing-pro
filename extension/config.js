@@ -16,6 +16,9 @@ const VERIFY_PAYMENT_URL =
 // Hosted checkout page (Vercel)
 const CHECKOUT_URL = "https://meesho-ai-tool.vercel.app/checkout.html";
 
+// Vision AI - Analyze product image
+const ANALYZE_IMAGE_URL = "https://meesho-ai-tool.vercel.app/api/analyze-image";
+
 
 const CONFIG = {
     // ── Supabase ───────────────────────────────────────────────
@@ -47,54 +50,32 @@ const CONFIG = {
         pro: { label: 'Pro Monthly', color: '#10b981' },
     },
 
-    // ── Pricing Plans (shown in upgrade / buy-credits modal) ───
-    // NO unlimited plans — credits are always finite.
-    PRICING: {
+    // ── Credit Packs (for users who don't want subscriptions) ───
+    CREDIT_PACKS: {
         STARTER: {
-            id: 'starter',
-            name: 'Starter',
+            id: 'credit_starter',
+            name: 'Starter Pack',
             price: 79,
             credits: 50,
-            oneTime: true,
-            popular: false,
             badge: null,
             tagline: 'Great for beginners',
             features: [
                 '50 Credits',
                 'One-time payment',
-                'Shipping Check Free',
+                'No expiry',
             ],
         },
         GROWTH: {
-            id: 'growth',
-            name: 'Growth',
+            id: 'credit_growth',
+            name: 'Growth Pack',
             price: 149,
             credits: 200,
-            oneTime: true,
-            popular: true,
-            badge: 'Most Popular',
-            tagline: 'Best value for active sellers',
+            badge: 'Best Value',
+            tagline: 'Best value per credit',
             features: [
                 '200 Credits',
                 'One-time payment',
-                'Shipping Check Free',
-                'Priority Processing',
-            ],
-        },
-        PRO: {
-            id: 'pro',
-            name: 'Pro Monthly',
-            price: 249,
-            credits: 500,
-            oneTime: false,
-            popular: false,
-            badge: 'Best for Power Sellers',
-            tagline: 'Auto-renew every billing cycle',
-            features: [
-                '500 Credits / month',
-                'Credits reset each cycle',
-                'Auto-renewal subscription',
-                'Priority Support',
+                'No expiry',
             ],
         },
     },
@@ -145,6 +126,7 @@ const CONFIG = {
     CREATE_ORDER_URL: CREATE_ORDER_URL,
     VERIFY_PAYMENT_URL: VERIFY_PAYMENT_URL,
     CHECKOUT_URL: CHECKOUT_URL,
+    ANALYZE_IMAGE_URL: ANALYZE_IMAGE_URL,
 
     // ── WhatsApp Support ───────────────────────────────────────
     OWNER_NAME: 'Hashmi Akbar',

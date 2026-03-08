@@ -1,19 +1,3 @@
-require("dotenv").config();
-
-const express = require("express");
-const cors = require("cors");
-const OpenAI = require("openai");
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-
-// Groq (OpenAI-compatible) Client
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-});
-
 const MEESHO_CATEGORY_HIERARCHY = `
 Women Clothing: Kurtis, Kurta Sets, Sarees, Dresses, Tops & Tunics, T-Shirts, Shirts, Jeans, Jeggings, Leggings, Palazzo Pants, Ethnic Sets, Skirts, Nightwear, Innerwear, Maternity Wear, Ethnic Bottomwear, Dupattas, Ethnic Jackets, Blouses, Lehenga Choli, Gowns
 Men Clothing: T-Shirts, Shirts, Casual Shirts, Formal Shirts, Jeans, Trousers, Ethnic Wear, Kurtas, Sherwanis, Jackets, Blazers, Hoodies, Sweatshirts, Track Pants, Shorts, Innerwear, Nightwear
@@ -31,85 +15,38 @@ Automotive Accessories: Car Phone Holders, Car Chargers, Car Seat Covers, Car Cl
 Pet Supplies: Pet Toys, Pet Beds, Pet Feeding Bowls, Pet Grooming Tools
 Books: Educational Books, Children Books, Coloring Books, Activity Books`;
 
-// Optimize Route
-app.post("/optimize", async (req, res) => {
-  try {
-    const { title, keywords, category } = req.body;
-
-    if (!title || !category) {
-      return res.status(400).json({ success: false, error: "title and category are required" });
-    }
-
-    const keywordList = keywords
-      ? String(keywords).split(",").map(k => k.trim()).filter(Boolean).join(", ")
-      : "";
-
-    const prompt = `You are a Meesho product listing optimizer. Given a product title, category hint, and keywords, generate:
-  1. The single most accurate category from the allowed hierarchy below
-  2. An optimized SEO-friendly title (max 150 chars)
-  3. 5 bullet points highlighting features and benefits
-  4. A short product description (2-3 sentences)
-
-  Allowed Meesho category hierarchy:
-  ${MEESHO_CATEGORY_HIERARCHY}
-
-Product Title: ${title}
-  Category Hint: ${category}
-${keywordList ? `Keywords: ${keywordList}` : ""}
-
-  Rules:
-  - Choose exactly one category in the format "Main Category > Subcategory".
-  - The category must be selected only from the hierarchy above.
-  - Pick the closest match based on the product title and keywords.
-  - Do not invent categories or return explanations.
-
-  Respond in JSON format: { "category": "Main Category > Subcategory", "optimizedTitle": "...", "bullets": ["...", ...], "description": "..." }`;
-
-    const completion = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
-
-    const content = completion.choices[0].message.content;
-
-    // Try to parse JSON from the response
-    let data;
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      data = jsonMatch ? JSON.parse(jsonMatch[0]) : { category, optimizedTitle: content, bullets: [], description: "" };
-    } catch {
-      data = { category, optimizedTitle: content, bullets: [], description: "" };
-    }
-
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error("Groq Error:", err.message);
-    res.status(500).json({ success: false, error: "Server error" });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
-});
 
-// ── Analyze Image (Vision) Route ──────────────────────────
-app.post("/analyze-image", async (req, res) => {
-  try {
-    const { image, hints, audience, priceGoal, tone } = req.body;
-
-    if (!image) {
-      return res.status(400).json({ success: false, error: "image (base64 data URL) is required" });
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch {
+      return res.status(400).json({ success: false, error: 'Invalid JSON body' });
     }
+  }
 
-    const extraContext = [
-      hints ? `Seller hints: ${hints}` : '',
-      audience && audience !== 'auto' ? `Target buyer: ${audience}` : '',
-      priceGoal ? `Target price: ₹${priceGoal}` : '',
-      tone ? `Tone: ${tone}` : '',
-    ].filter(Boolean).join('. ');
+  const { image, hints, audience, priceGoal, tone } = body || {};
 
-    const prompt = `You are a Meesho marketplace product listing expert. Analyze this product image carefully and generate a complete, optimized listing.
+  if (!image) {
+    return res.status(400).json({ success: false, error: 'image (base64 data URL) is required' });
+  }
+
+  const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+  if (!GROQ_API_KEY) {
+    return res.status(500).json({ success: false, error: 'Vision API key not configured' });
+  }
+
+  const extraContext = [
+    hints ? `Seller hints: ${hints}` : '',
+    audience && audience !== 'auto' ? `Target buyer: ${audience}` : '',
+    priceGoal ? `Target price: ₹${priceGoal}` : '',
+    tone ? `Tone: ${tone}` : '',
+  ].filter(Boolean).join('. ');
+
+  const prompt = `You are a Meesho marketplace product listing expert. Analyze this product image carefully and generate a complete, optimized listing.
 
 ${extraContext ? `Additional context from seller: ${extraContext}\n` : ''}
 Allowed Meesho category hierarchy (pick EXACTLY one "Main Category > Subcategory"):
@@ -127,20 +64,35 @@ Based ONLY on what you see in the image, generate:
 
 Respond ONLY with valid JSON: { "title": "...", "category": "...", "description": "...", "keywords": [...], "tags": [...], "color": "...", "material": "...", "audience": "..." }`;
 
-    const completion = await client.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: image } },
-        ],
-      }],
-      max_tokens: 1024,
-      temperature: 0.3,
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: image } },
+          ],
+        }],
+        max_tokens: 1024,
+        temperature: 0.3,
+      }),
     });
 
-    const content = completion.choices[0].message.content;
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[analyze-image] Groq API error:', response.status, errText);
+      return res.status(502).json({ success: false, error: 'Vision API request failed' });
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || '';
 
     let data;
     try {
@@ -151,17 +103,24 @@ Respond ONLY with valid JSON: { "title": "...", "category": "...", "description"
     }
 
     if (!data || !data.title) {
-      return res.status(502).json({ success: false, error: "Could not parse vision response", raw: content });
+      return res.status(502).json({ success: false, error: 'Could not parse vision response', raw: content });
     }
 
+    // Ensure arrays
     if (!Array.isArray(data.keywords)) data.keywords = [];
     if (!Array.isArray(data.tags)) data.tags = [];
 
-    res.json({ success: true, data });
+    return res.status(200).json({ success: true, data });
   } catch (err) {
-    console.error("Vision Error:", err.message);
-    res.status(500).json({ success: false, error: "Server error" });
+    console.error('[analyze-image] Error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to analyze image' });
   }
-});
+}
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};

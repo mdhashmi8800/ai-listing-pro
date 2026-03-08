@@ -67,10 +67,11 @@
     "https://zxborvqzttyofyrksznw.supabase.co/*",
     "https://*.supabase.co/*",
     "https://accounts.google.com/*",
-    "https://www.googleapis.com/*"
+    "https://www.googleapis.com/*",
+    "https://meesho-ai-tool.vercel.app/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://zxborvqzttyofyrksznw.supabase.co https://*.supabase.co https://www.googleapis.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://zxborvqzttyofyrksznw.supabase.co https://*.supabase.co https://www.googleapis.com https://meesho-ai-tool.vercel.app;"
   },
   "web_accessible_resources": [
     {

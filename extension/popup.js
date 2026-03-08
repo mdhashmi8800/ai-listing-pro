@@ -325,19 +325,27 @@ document.addEventListener('DOMContentLoaded', async () => {
           const subscription = await fetchSubscription(user.id, token);
 
           if (subscription && new Date(subscription.end_date) > new Date()) {
-            // STATE 3: Subscribed
+            // STATE 3: Subscribed — unlimited access
             showSubscribedState(user, subscription);
             headerBadge.textContent = 'PRO';
             headerBadge.style.background = 'rgba(16, 185, 129, 0.15)';
             headerBadge.style.color = '#10b981';
             headerBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
           } else {
-            // STATE 4: Not Subscribed
+            // STATE 4: Not Subscribed — show credits + upgrade option
             showPricingState(user);
-            headerBadge.textContent = 'FREE';
-            headerBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-            headerBadge.style.color = '#f59e0b';
-            headerBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+            const credits = user.credits || 0;
+            if (credits > 0) {
+              headerBadge.textContent = `${credits} CR`;
+              headerBadge.style.background = 'rgba(124, 58, 237, 0.15)';
+              headerBadge.style.color = '#a78bfa';
+              headerBadge.style.borderColor = 'rgba(124, 58, 237, 0.3)';
+            } else {
+              headerBadge.textContent = 'FREE';
+              headerBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+              headerBadge.style.color = '#f59e0b';
+              headerBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+            }
           }
           return;
         }
@@ -438,6 +446,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       showMessage('Creating order...', 'info');
+
+      console.log("CHECKOUT DATA", {
+        user_id: stored.user.id,
+        plan: plan.id,
+        duration_days: plan.duration_days,
+        amount: plan.price
+      });
 
       const res = await bgFetch(CONFIG.CREATE_ORDER_URL, {
         method: "POST",

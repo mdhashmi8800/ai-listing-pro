@@ -49,6 +49,8 @@
     <div class="status-msg" id="status-msg">Initializing secure checkout...</div>
 </div>
 <script>
+    console.log("CHECKOUT VERSION 2 LOADED — public/checkout.html");
+
     function safePostToParent(data) {
         try { window.parent.postMessage(data, '*'); } catch(e) { console.error('postMessage error', e); }
     }
@@ -64,6 +66,13 @@
     const durationDays = params.get('duration_days') || '';
     const statusEl = document.getElementById('status-msg');
     const planLabel = document.getElementById('plan-label');
+
+    console.log("CHECKOUT DATA:", {
+        user_id: userId,
+        plan: planId,
+        duration_days: durationDays,
+        amount
+    });
 
     if (planLabel) {
         planLabel.textContent = 'Plan: ' + planName;

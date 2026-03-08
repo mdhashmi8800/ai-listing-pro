@@ -1,16 +1,58 @@
 "use client";
 
+import { createClient } from "@supabase/supabase-js";
+import { useEffect, useState, useRef } from "react";
+
 declare global {
   interface Window {
     Razorpay: any;
   }
 }
 
-const plans = [
+// Client-side Supabase instance — requires NEXT_PUBLIC_ env vars on Vercel
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
+
+interface Plan {
+  id: string;
+  name: string;
+  price: string;
+  amount: number;
+  duration_days: number;
+  period: string;
+  description: string;
+  features: string[];
+  cta: string;
+  highlighted: boolean;
+  badge: string | null;
+  badgeColor: string;
+}
+
+interface CreditPack {
+  id: string;
+  name: string;
+  price: string;
+  amount: number;
+  credits: number;
+  perCredit: string;
+  description: string;
+  features: string[];
+  cta: string;
+  badge: string | null;
+  badgeColor: string;
+}
+
+const plans: Plan[] = [
   {
+    id: "trial",
     name: "Trial",
     price: "₹79",
     amount: 79,
+    duration_days: 10,
     period: "10 DAYS",
     description: "Try all AI tools for 10 days.",
     features: [
@@ -26,9 +68,11 @@ const plans = [
     badgeColor: "",
   },
   {
+    id: "monthly",
     name: "Monthly",
     price: "₹299",
     amount: 299,
+    duration_days: 30,
     period: "/month",
     description: "Full access for active sellers.",
     features: [
@@ -44,9 +88,11 @@ const plans = [
     badgeColor: "from-primary to-purple-400",
   },
   {
+    id: "quarterly",
     name: "3 Months",
     price: "₹899",
     amount: 899,
+    duration_days: 90,
     period: "/ 3 MONTHS",
     description: "Save ₹98 vs monthly billing.",
     features: [
@@ -62,9 +108,11 @@ const plans = [
     badgeColor: "",
   },
   {
+    id: "half_yearly",
     name: "6 Months",
     price: "₹1499",
     amount: 1499,
+    duration_days: 180,
     period: "/ 6 MONTHS",
     description: "Save ₹295 vs monthly billing.",
     features: [
@@ -80,9 +128,11 @@ const plans = [
     badgeColor: "",
   },
   {
+    id: "yearly",
     name: "Yearly",
     price: "₹2099",
     amount: 2099,
+    duration_days: 365,
     period: "/ YEAR",
     description: "Best value — save ₹1489 per year.",
     features: [
@@ -100,19 +150,110 @@ const plans = [
   },
 ];
 
+const creditPacks: CreditPack[] = [
+  {
+    id: "credit_starter",
+    name: "Starter Pack",
+    price: "₹79",
+    amount: 79,
+    credits: 50,
+    perCredit: "₹1.58/credit",
+    description: "Great for beginners — try AI tools without a subscription.",
+    features: [
+      "50 credits",
+      "One-time payment",
+      "No expiry — use anytime",
+      "All AI tools accessible",
+    ],
+    cta: "Buy 50 Credits",
+    badge: null,
+    badgeColor: "",
+  },
+  {
+    id: "credit_growth",
+    name: "Growth Pack",
+    price: "₹149",
+    amount: 149,
+    credits: 200,
+    perCredit: "₹0.75/credit",
+    description: "Best value per credit — ideal for regular sellers.",
+    features: [
+      "200 credits",
+      "One-time payment",
+      "No expiry — use anytime",
+      "All AI tools accessible",
+      "Save 53% per credit",
+    ],
+    cta: "Buy 200 Credits",
+    badge: "BEST VALUE",
+    badgeColor: "from-blue-500 to-cyan-400",
+  },
+];
+
 export default function Pricing() {
-  const startPayment = async (amount: number, plan: string) => {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [payingPlan, setPayingPlan] = useState<string | null>(null);
+  const pendingPlanRef = useRef<Plan | null>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    // Check for existing session
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id);
+    });
+    // Listen for auth changes (e.g. after OAuth redirect)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      // If user just logged in and had a pending plan, start payment
+      if (uid && pendingPlanRef.current) {
+        const plan = pendingPlanRef.current;
+        pendingPlanRef.current = null;
+        startPayment(plan, uid);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (plan: Plan) => {
+    if (!supabase) {
+      alert("Authentication is not configured. Please use the Chrome extension to subscribe.");
+      return;
+    }
+    pendingPlanRef.current = plan;
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + "/#pricing" },
+    });
+  };
+
+  const startPayment = async (plan: Plan, uid?: string) => {
+    const currentUserId = uid || userId;
+    if (!currentUserId) {
+      handleLogin(plan);
+      return;
+    }
+
     try {
+      setPayingPlan(plan.id);
+
       const res = await fetch("/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, plan }),
+        body: JSON.stringify({
+          amount: plan.amount,
+          plan_id: plan.id,
+          user_id: currentUserId,
+          duration_days: plan.duration_days,
+        }),
       });
 
       const order = await res.json();
 
       if (!order.id) {
-        alert("Failed to create order");
+        alert(order.error || "Failed to create order");
         return;
       }
 
@@ -121,19 +262,143 @@ export default function Pricing() {
         amount: order.amount,
         currency: "INR",
         name: "AI Listing Pro",
-        description: plan,
+        description: plan.name,
         order_id: order.id,
-        handler: async function () {
-          alert("Payment Successful! Your subscription is now active.");
-          window.location.reload();
+        notes: {
+          user_id: currentUserId,
+          plan: plan.id,
+          duration_days: String(plan.duration_days),
         },
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            const verifyRes = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                user_id: currentUserId,
+                plan: plan.id,
+                duration_days: plan.duration_days,
+                amount: plan.amount,
+              }),
+            });
+            const result = await verifyRes.json();
+            if (result.success) {
+              alert("Payment Successful! Your subscription is now active.");
+              window.location.reload();
+            } else {
+              alert("Payment verification failed. Please contact support.");
+            }
+          } catch {
+            alert("Payment verification failed. Please contact support.");
+          }
+        },
+        modal: {
+          ondismiss: () => setPayingPlan(null),
+        },
+        theme: { color: "#7c3aed" },
       };
 
-      const rzp = new (window as any).Razorpay(options);
+      const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err) {
       console.error("Payment error:", err);
       alert("Something went wrong. Please try again.");
+    } finally {
+      setPayingPlan(null);
+    }
+  };
+
+  const startCreditPayment = async (pack: CreditPack, uid?: string) => {
+    const currentUserId = uid || userId;
+    if (!currentUserId) {
+      // Reuse login flow with a synthetic plan object
+      handleLogin({ ...pack, duration_days: 0, period: "", highlighted: false } as Plan);
+      return;
+    }
+
+    try {
+      setPayingPlan(pack.id);
+
+      const res = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: pack.amount,
+          plan_id: pack.id,
+          user_id: currentUserId,
+          credits_to_add: pack.credits,
+        }),
+      });
+
+      const order = await res.json();
+
+      if (!order.id) {
+        alert(order.error || "Failed to create order");
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: order.amount,
+        currency: "INR",
+        name: "AI Listing Pro",
+        description: `${pack.credits} Credits`,
+        order_id: order.id,
+        notes: {
+          user_id: currentUserId,
+          plan: pack.id,
+          credits_to_add: String(pack.credits),
+        },
+        handler: async function (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) {
+          try {
+            const verifyRes = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                user_id: currentUserId,
+                plan: pack.id,
+                credits_to_add: pack.credits,
+                amount: pack.amount,
+              }),
+            });
+            const result = await verifyRes.json();
+            if (result.success) {
+              alert(`Payment Successful! ${result.credits_added || pack.credits} credits added.`);
+              window.location.reload();
+            } else {
+              alert("Payment verification failed. Please contact support.");
+            }
+          } catch {
+            alert("Payment verification failed. Please contact support.");
+          }
+        },
+        modal: {
+          ondismiss: () => setPayingPlan(null),
+        },
+        theme: { color: "#3b82f6" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error("Credit payment error:", err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setPayingPlan(null);
     }
   };
 
@@ -149,12 +414,17 @@ export default function Pricing() {
             Simple, transparent pricing
           </h2>
           <p className="mt-4 text-muted text-lg">
-            Pick a subscription that fits your selling goals. No hidden fees. UPI
-            payment via Razorpay.
+            Subscribe for unlimited access, or buy credit packs to pay per use.
+            No hidden fees. UPI payment via Razorpay.
           </p>
         </div>
 
-        {/* Cards — responsive grid */}
+        {/* ── SUBSCRIPTION PLANS ── */}
+        <div className="text-center mb-8">
+          <h3 className="text-xl font-bold text-foreground mb-1">⚡ Unlimited Access Plans</h3>
+          <p className="text-muted text-sm">All AI tools unlimited during your plan period</p>
+        </div>
+
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
           {plans.map((plan, i) => (
             <div
@@ -205,7 +475,8 @@ export default function Pricing() {
                 ))}
               </ul>
               <button
-                onClick={() => startPayment(plan.amount, plan.name)}
+                onClick={() => startPayment(plan)}
+                disabled={payingPlan === plan.id}
                 className={`w-full py-3 rounded-full font-semibold text-sm transition-all cursor-pointer ${
                   plan.highlighted
                     ? "bg-primary text-white hover:bg-primary-dark shadow-lg shadow-primary/25"
@@ -214,10 +485,73 @@ export default function Pricing() {
                     : "bg-surface text-foreground border border-border hover:border-primary/30 hover:bg-primary/5"
                 }`}
               >
-                {plan.cta}
+                {payingPlan === plan.id ? "Processing..." : plan.cta}
               </button>
             </div>
           ))}
+        </div>
+
+        {/* ── CREDIT PACKS SECTION ── */}
+        <div className="mt-20 max-w-3xl mx-auto">
+          <div className="text-center mb-8">
+            <h3 className="text-xl font-bold text-foreground mb-1">💳 Credit Packs</h3>
+            <p className="text-muted text-sm">Don&apos;t want a subscription? Buy credits instead — no expiry, pay per use.</p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-6">
+            {creditPacks.map((pack, i) => (
+              <div
+                key={i}
+                className={`relative rounded-2xl p-7 border transition-all duration-300 hover:-translate-y-1 ${
+                  pack.badge
+                    ? "bg-surface-2 border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/10"
+                    : "bg-surface-2 border-border hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/10"
+                }`}
+              >
+                {pack.badge && (
+                  <div
+                    className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r ${pack.badgeColor} text-white text-xs font-bold rounded-full whitespace-nowrap`}
+                  >
+                    {pack.badge}
+                  </div>
+                )}
+                <h3 className="text-lg font-bold mb-1 text-foreground">{pack.name}</h3>
+                <p className="text-muted text-xs mb-3">{pack.description}</p>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-3xl font-extrabold text-foreground">{pack.price}</span>
+                  <span className="text-muted text-xs uppercase">one-time</span>
+                </div>
+                <p className="text-xs text-blue-400 mb-5">{pack.perCredit}</p>
+                <ul className="space-y-2.5 mb-6">
+                  {pack.features.map((f, j) => (
+                    <li key={j} className="flex items-start gap-2 text-sm text-muted">
+                      <svg
+                        className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => startCreditPayment(pack)}
+                  disabled={payingPlan === pack.id}
+                  className="w-full py-3 rounded-full font-semibold text-sm transition-all cursor-pointer bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"
+                >
+                  {payingPlan === pack.id ? "Processing..." : pack.cta}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* UPI badge */}

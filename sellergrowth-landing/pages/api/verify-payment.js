@@ -94,6 +94,84 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
+    // ── Determine payment type: subscription vs credit pack ──
+    const isCreditPack = credits_to_add && parseInt(credits_to_add) > 0 && !duration_days;
+
+    if (isCreditPack) {
+      // ════════════════════════════════════════
+      //  CREDIT PACK PURCHASE
+      // ════════════════════════════════════════
+      const creditsToAdd = parseInt(credits_to_add);
+
+      // Get current user profile
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("credits, first_purchase")
+        .eq("id", user_id)
+        .single();
+
+      if (profileErr || !profile) {
+        console.error("[verify-payment] User not found:", profileErr);
+        return res.status(400).json({ error: "User not found" });
+      }
+
+      const newBalance = (profile.credits || 0) + creditsToAdd;
+
+      // Update credits in profiles
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({
+          credits: newBalance,
+          first_purchase: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user_id);
+
+      if (updateErr) {
+        console.error("[verify-payment] Credit update error:", updateErr);
+        return res.status(500).json({ error: "Failed to update credits" });
+      }
+
+      // Log payment record
+      await supabase.from("payments").upsert(
+        {
+          user_id,
+          amount: amount || 0,
+          plan: planName,
+          credits_added: creditsToAdd,
+          razorpay_order_id,
+          razorpay_payment_id,
+          razorpay_signature,
+          status: "captured",
+        },
+        { onConflict: "razorpay_order_id" }
+      );
+
+      // Log credit transaction
+      await supabase.from("credit_transactions").insert({
+        user_id,
+        delta: creditsToAdd,
+        reason: "topup",
+        meta: { razorpay_payment_id, plan: planName },
+      });
+
+      console.log("[verify-payment] Credit pack success:", {
+        user_id,
+        credits_added: creditsToAdd,
+        new_balance: newBalance,
+      });
+
+      return res.status(200).json({
+        success: true,
+        subscription: false,
+        credits_added: creditsToAdd,
+        new_balance: newBalance,
+      });
+    }
+
+    // ════════════════════════════════════════
+    //  SUBSCRIPTION PURCHASE
+    // ════════════════════════════════════════
     const durationDays = parseInt(duration_days) || 30;
     const startDate = new Date();
     const endDate = new Date(
@@ -135,7 +213,7 @@ export default async function handler(req, res) {
         user_id,
         amount: amount || 0,
         plan: planName,
-        credits_added: credits_to_add || 0,
+        credits_added: 0,
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,
@@ -144,7 +222,7 @@ export default async function handler(req, res) {
       { onConflict: "razorpay_order_id" }
     );
 
-    console.log("[verify-payment] Success:", {
+    console.log("[verify-payment] Subscription success:", {
       user_id,
       plan: planName,
       durationDays,

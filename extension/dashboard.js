@@ -1,6 +1,6 @@
 // AI Listing Pro — Dashboard Logic
 // 3-Step Workflow: Upload → Generate → Apply to Meesho
-// Credits are only deducted when user runs an analysis.
+// Hybrid model: Subscription = unlimited tools, otherwise credit-based.
 
 (async function () {
   'use strict';
@@ -8,12 +8,29 @@
   // ── State ──
   let currentUser = null;
   let userProfile = null;
+  let activeSubscription = null;  // Current active subscription object or null
   let analysisHistory = [];
   let currentListingImage = null;
   let lastGeneratedListing = null;
   let activePaymentPlanId = null;
+  let activePaymentTab = 'subscription'; // 'subscription' or 'credits'
   let currentPaymentContext = null;
   let paymentVerificationInFlight = false;
+
+  // ── Hybrid Access Check ──
+  function hasActiveSubscription() {
+    return activeSubscription && new Date(activeSubscription.end_date) > new Date();
+  }
+
+  function canUseTool(creditCost = 1) {
+    if (hasActiveSubscription()) return true;
+    return (userProfile?.credits || 0) >= creditCost;
+  }
+
+  function getAccessLabel(creditCost = 1) {
+    if (hasActiveSubscription()) return 'Unlimited';
+    return `${creditCost} Credit`;
+  }
 
   // ── DOM References ──
   const DOM = {
@@ -64,6 +81,7 @@
     step3Indicator: document.getElementById('step-3-indicator'),
     step1Panel: document.getElementById('step-1-panel'),
     step2Panel: document.getElementById('step-2-panel'),
+    step3Panel: document.getElementById('step-3-panel'),
     // Keyword tool
     btnRunKeywords: document.getElementById('btn-run-keywords'),
     resultKeywords: document.getElementById('result-keywords'),
@@ -346,6 +364,22 @@
     }
 
     userProfile = profile;
+
+    // Fetch active subscription
+    const { data: subs } = await sbClient
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('end_date', { ascending: false })
+      .limit(1);
+
+    if (subs && subs.length > 0 && new Date(subs[0].end_date) > new Date()) {
+      activeSubscription = subs[0];
+    } else {
+      activeSubscription = null;
+    }
+
     updateUI();
     return true;
   }
@@ -403,22 +437,69 @@
     const email = currentUser.email || '—';
     const initial = name.charAt(0).toUpperCase();
 
-    DOM.sidebarCreditsCount.textContent = credits;
+    // Sidebar credits / subscription display
+    if (hasActiveSubscription()) {
+      DOM.sidebarCreditsCount.textContent = '∞';
+      DOM.sidebarCredits.querySelector('.credits-label').textContent = `${activeSubscription.plan_name || 'Pro'} — ${formatSubscriptionExpiry(activeSubscription.end_date)}`;
+      DOM.sidebarCredits.classList.remove('low');
+      DOM.sidebarCredits.classList.add('subscribed');
+      // Update nav badges
+      document.querySelectorAll('.nav-badge').forEach(b => {
+        if (b.textContent.includes('cr')) b.textContent = '∞';
+      });
+      // Update button labels
+      if (DOM.btnBuyCredits) DOM.btnBuyCredits.innerHTML = '⚡ Pro';
+    } else {
+      DOM.sidebarCreditsCount.textContent = credits;
+      DOM.sidebarCredits.querySelector('.credits-label').textContent = 'Credits left';
+      DOM.sidebarCredits.classList.remove('subscribed');
+      document.querySelectorAll('.nav-badge').forEach(b => {
+        if (b.textContent === '∞') b.textContent = '1 cr';
+      });
+      if (DOM.btnBuyCredits) DOM.btnBuyCredits.innerHTML = '⚡ Credits';
+      if (credits <= 5) {
+        DOM.sidebarCredits.classList.add('low');
+      } else {
+        DOM.sidebarCredits.classList.remove('low');
+      }
+    }
+
     DOM.sidebarName.textContent = name;
     DOM.sidebarEmail.textContent = email;
     DOM.sidebarAvatar.textContent = initial;
 
-    if (DOM.shipHeaderCreditsCount) DOM.shipHeaderCreditsCount.textContent = credits;
+    if (DOM.shipHeaderCreditsCount) DOM.shipHeaderCreditsCount.textContent = hasActiveSubscription() ? '∞' : credits;
     if (DOM.shipUserName) DOM.shipUserName.textContent = name;
     if (DOM.shipUserAvatar) DOM.shipUserAvatar.textContent = initial;
     if (DOM.shipCreditsBadge) {
-      DOM.shipCreditsBadge.classList.toggle('low', credits <= 5);
+      DOM.shipCreditsBadge.classList.toggle('low', !hasActiveSubscription() && credits <= 5);
     }
 
-    if (credits <= 5) {
-      DOM.sidebarCredits.classList.add('low');
-    } else {
-      DOM.sidebarCredits.classList.remove('low');
+    // Update generate button labels
+    updateToolButtonLabels();
+  }
+
+  function formatSubscriptionExpiry(endDate) {
+    const d = new Date(endDate);
+    const now = new Date();
+    const daysLeft = Math.ceil((d - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 0) return 'Expired';
+    if (daysLeft === 1) return '1 day left';
+    if (daysLeft <= 7) return `${daysLeft} days left`;
+    return `till ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+  }
+
+  function updateToolButtonLabels() {
+    const label = hasActiveSubscription() ? 'Unlimited' : '1 Credit';
+    const bulkLabel = hasActiveSubscription() ? 'Unlimited' : '1 Credit per product';
+    if (DOM.btnRunListing && !DOM.btnRunListing.disabled) {
+      DOM.btnRunListing.innerHTML = `<span class="btn-icon">🧠</span> Generate Listing — ${label}`;
+    }
+    if (DOM.btnRunKeywords && !DOM.btnRunKeywords.disabled) {
+      DOM.btnRunKeywords.innerHTML = `<span class="btn-icon">🔍</span> Generate Keywords — ${label}`;
+    }
+    if (DOM.btnRunBulk && !DOM.btnRunBulk.disabled) {
+      DOM.btnRunBulk.innerHTML = `<span class="btn-icon">⚡</span> Generate Bulk — ${bulkLabel}`;
     }
   }
 
@@ -476,11 +557,16 @@
   function renderPaymentPlans() {
     if (!DOM.paymentPlanList) return;
 
-    const plans = getSubscriptionPlans();
-    DOM.paymentPlanList.innerHTML = plans.map((plan) => {
-      const isActive = plan.id === activePaymentPlanId;
+    // Subscription plans
+    const subPlans = getSubscriptionPlans();
+
+    // Credit packs
+    const creditPacks = Object.values(CONFIG.CREDIT_PACKS || {});
+
+    const subHtml = subPlans.map((plan) => {
+      const isActive = activePaymentTab === 'subscription' && plan.id === activePaymentPlanId;
       const isHighlight = Boolean(plan.badge);
-      return `<button class="payment-plan-card ${isActive ? 'active' : ''} ${isHighlight ? 'highlight' : ''}" type="button" data-payment-plan="${escapeHtml(plan.id)}">
+      return `<button class="payment-plan-card ${isActive ? 'active' : ''} ${isHighlight ? 'highlight' : ''}" type="button" data-payment-plan="${escapeHtml(plan.id)}" data-plan-type="subscription">
         <span class="payment-plan-copy">
           <strong>${escapeHtml(plan.name)}</strong>
           <small>${escapeHtml(plan.label)}</small>
@@ -488,17 +574,79 @@
         <span class="payment-plan-price">
           ${plan.badge ? `<span class="payment-plan-badge">${escapeHtml(plan.badge)}</span>` : ''}
           <strong>₹${escapeHtml(String(plan.price))}</strong>
-          <small>${plan.duration_days} days access</small>
+          <small>All tools unlimited</small>
         </span>
       </button>`;
     }).join('');
 
-    DOM.paymentPlanList.querySelectorAll('[data-payment-plan]').forEach((button) => {
-      button.addEventListener('click', async () => {
-        const planId = button.dataset.paymentPlan;
-        activePaymentPlanId = planId;
+    const creditHtml = creditPacks.map((pack) => {
+      const isActive = activePaymentTab === 'credits' && pack.id === activePaymentPlanId;
+      return `<button class="payment-plan-card ${isActive ? 'active' : ''}" type="button" data-payment-plan="${escapeHtml(pack.id)}" data-plan-type="credits">
+        <span class="payment-plan-copy">
+          <strong>${escapeHtml(pack.name)}</strong>
+          <small>${escapeHtml(pack.tagline)}</small>
+        </span>
+        <span class="payment-plan-price">
+          ${pack.badge ? `<span class="payment-plan-badge">${escapeHtml(pack.badge)}</span>` : ''}
+          <strong>₹${escapeHtml(String(pack.price))}</strong>
+          <small>${pack.credits} credits · No expiry</small>
+        </span>
+      </button>`;
+    }).join('');
+
+    DOM.paymentPlanList.innerHTML = `
+      <div class="payment-tab-toggle">
+        <button class="payment-tab-btn ${activePaymentTab === 'subscription' ? 'active' : ''}" data-tab="subscription">
+          ⚡ Subscription <small>Unlimited</small>
+        </button>
+        <button class="payment-tab-btn ${activePaymentTab === 'credits' ? 'active' : ''}" data-tab="credits">
+          💳 Credit Packs <small>Pay per use</small>
+        </button>
+      </div>
+
+      <div class="payment-tab-content" id="tab-subscription" style="display:${activePaymentTab === 'subscription' ? 'block' : 'none'}">
+        <div class="payment-section-head">
+          <span class="payment-section-title">🔓 Unlimited Access Plans</span>
+          <span class="payment-section-note">All tools unlimited during plan period</span>
+        </div>
+        <div class="payment-plan-grid">${subHtml}</div>
+      </div>
+
+      <div class="payment-tab-content" id="tab-credits" style="display:${activePaymentTab === 'credits' ? 'block' : 'none'}">
+        <div class="payment-section-head">
+          <span class="payment-section-title">💰 Credit Packs</span>
+          <span class="payment-section-note">Buy credits · Use anytime · No expiry</span>
+        </div>
+        <div class="payment-plan-grid">${creditHtml}</div>
+      </div>
+    `;
+
+    // Tab toggle events
+    DOM.paymentPlanList.querySelectorAll('.payment-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activePaymentTab = btn.dataset.tab;
+        activePaymentPlanId = null;
         renderPaymentPlans();
-        await startEmbeddedPayment(planId);
+      });
+    });
+
+    // Subscription plan click events
+    DOM.paymentPlanList.querySelectorAll('[data-plan-type="subscription"]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        activePaymentPlanId = button.dataset.paymentPlan;
+        activePaymentTab = 'subscription';
+        renderPaymentPlans();
+        await startEmbeddedPayment(button.dataset.paymentPlan);
+      });
+    });
+
+    // Credit pack click events
+    DOM.paymentPlanList.querySelectorAll('[data-plan-type="credits"]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        activePaymentPlanId = button.dataset.paymentPlan;
+        activePaymentTab = 'credits';
+        renderPaymentPlans();
+        await startCreditPackPayment(button.dataset.paymentPlan);
       });
     });
   }
@@ -616,6 +764,83 @@
     }
   }
 
+  async function startCreditPackPayment(packId) {
+    const pack = Object.values(CONFIG.CREDIT_PACKS || {}).find(p => p.id === packId);
+    if (!pack) return;
+
+    const phone = DOM.paymentPhoneInput?.value?.replace(/\D/g, '') || '';
+    if (phone.length !== 10) {
+      setPaymentStatus('Enter a valid 10-digit WhatsApp number before continuing.', 'error');
+      DOM.paymentPhoneInput?.focus();
+      return;
+    }
+
+    const token = await getAccessToken();
+    if (!token || !currentUser) {
+      setPaymentStatus('Session expired. Refresh and try again.', 'error');
+      return;
+    }
+
+    try {
+      setPaymentStatus(`Creating ${pack.name} order...`, 'info');
+
+      const response = await bgFetch(CONFIG.CREATE_ORDER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: CONFIG.SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: pack.price,
+          plan_id: pack.id,
+          user_id: currentUser.id,
+          phone,
+          credits_to_add: pack.credits,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const order = await response.json();
+
+      currentPaymentContext = {
+        orderId: order.id,
+        amount: order.amount,
+        phone,
+        plan: pack,
+        isCreditPack: true,
+        credits_to_add: pack.credits,
+        started: true,
+      };
+
+      try {
+        sessionStorage.setItem('paymentContext', JSON.stringify(currentPaymentContext));
+      } catch (_) {}
+
+      const checkoutUrl = CONFIG.CHECKOUT_URL
+        + '?order_id=' + encodeURIComponent(order.id)
+        + '&amount=' + encodeURIComponent(order.amount)
+        + '&key=' + encodeURIComponent(CONFIG.RAZORPAY_KEY_ID)
+        + '&phone=' + encodeURIComponent(phone)
+        + '&plan=' + encodeURIComponent(pack.id)
+        + '&user_id=' + encodeURIComponent(currentUser.id)
+        + '&credits_to_add=' + encodeURIComponent(pack.credits);
+
+      window.parent.postMessage({
+        type: 'OPEN_CHECKOUT',
+        url: checkoutUrl,
+      }, '*');
+
+      setPaymentStatus(`Redirecting to secure checkout...`, 'info');
+    } catch (error) {
+      console.error('[DASHBOARD_PAYMENT] credit pack error:', error);
+      setPaymentStatus(`Could not start checkout: ${error.message}`, 'error');
+    }
+  }
+
   async function verifyEmbeddedPayment(paymentData) {
     if (!currentPaymentContext || paymentVerificationInFlight || !currentUser) return;
 
@@ -640,7 +865,8 @@
           user_id: currentUser.id,
           plan_type: currentPaymentContext.plan.id,
           amount: currentPaymentContext.plan.price,
-          duration_days: currentPaymentContext.plan.duration_days,
+          duration_days: currentPaymentContext.isCreditPack ? undefined : currentPaymentContext.plan.duration_days,
+          credits_to_add: currentPaymentContext.isCreditPack ? currentPaymentContext.credits_to_add : undefined,
           phone: currentPaymentContext.phone,
         }),
       });
@@ -650,12 +876,17 @@
       }
 
       const result = await response.json();
-      const expiryText = result.end_date
-        ? ` Plan active till ${new Date(result.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`
-        : '';
 
-      setPaymentStatus(`Payment verified successfully!${expiryText}`, 'success');
-      showToast('Payment successful! Subscription activated.', 'success');
+      if (currentPaymentContext.isCreditPack) {
+        setPaymentStatus(`Payment verified! ${result.credits_added || currentPaymentContext.credits_to_add} credits added.`, 'success');
+        showToast(`${result.credits_added || currentPaymentContext.credits_to_add} credits added to your account!`, 'success');
+      } else {
+        const expiryText = result.end_date
+          ? ` Plan active till ${new Date(result.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`
+          : '';
+        setPaymentStatus(`Payment verified successfully!${expiryText}`, 'success');
+        showToast('Payment successful! Subscription activated.', 'success');
+      }
       await initSession();
       currentPaymentContext = null;
       try { sessionStorage.removeItem('paymentContext'); } catch (_) {}
@@ -696,15 +927,21 @@
   }
 
   // ══════════════════════════════════════
-  //  CREDIT DEDUCTION
+  //  CREDIT DEDUCTION (skipped for subscribers)
   // ══════════════════════════════════════
   async function deductCredits(amount = 1) {
+    // Subscribers get unlimited access — no credit deduction
+    if (hasActiveSubscription()) {
+      return true;
+    }
+
     const sbClient = window.supabaseClient;
     if (!sbClient || !currentUser) return false;
 
     const currentCredits = userProfile?.credits || 0;
     if (currentCredits < amount) {
-      showToast('Not enough credits! Please buy more.', 'error');
+      showToast('Not enough credits! Subscribe for unlimited access or buy more credits.', 'error');
+      openPaymentDrawer();
       return false;
     }
 
@@ -714,7 +951,8 @@
     if (error) {
       const msg = error.message || '';
       if (msg.includes('insufficient_credits')) {
-        showToast('Not enough credits! Please buy more.', 'error');
+        showToast('Not enough credits! Subscribe for unlimited or buy more.', 'error');
+        openPaymentDrawer();
       } else if (msg.includes('account_banned')) {
         showToast('Your account has been suspended.', 'error');
       } else {
@@ -763,8 +1001,8 @@
     DOM.btnRemoveImage.addEventListener('click', () => {
       currentListingImage = null;
       DOM.listingImage.value = '';
-      DOM.imagePreviewBar.classList.add('hidden');
-      DOM.uploadZone.classList.remove('hidden');
+      // Go back to Step 1 (Upload)
+      setWorkflowStep(1);
     });
   }
 
@@ -774,8 +1012,8 @@
       DOM.listingPreviewImage.src = currentListingImage.dataUrl;
       DOM.previewFileName.textContent = file.name;
       DOM.previewMeta.textContent = `${currentListingImage.colorName} tone · ${currentListingImage.orientation} · ${currentListingImage.width}×${currentListingImage.height}`;
-      DOM.imagePreviewBar.classList.remove('hidden');
-      DOM.uploadZone.classList.add('hidden');
+      // Auto-advance to Step 2 (Configure & Generate)
+      setWorkflowStep(2);
     } catch (error) {
       currentListingImage = null;
       showToast('Could not read this image. Try a different file.', 'error');
@@ -799,16 +1037,10 @@
       c.classList.toggle('active', i + 1 < step);
     });
 
-    // Show/hide step panels
-    if (step === 1) {
-      DOM.step1Panel.classList.add('active');
-      DOM.step2Panel.classList.remove('active');
-      DOM.resultListing.classList.remove('active');
-    } else if (step >= 2) {
-      DOM.step1Panel.classList.remove('active');
-      DOM.step2Panel.classList.add('active');
-      DOM.resultListing.classList.add('active');
-    }
+    // Show/hide step panels (3 distinct panels)
+    DOM.step1Panel.classList.toggle('active', step === 1);
+    DOM.step2Panel.classList.toggle('active', step === 2);
+    DOM.step3Panel.classList.toggle('active', step === 3);
   }
 
   // ══════════════════════════════════════
@@ -816,8 +1048,9 @@
   // ══════════════════════════════════════
   async function readMeeshoPageData() {
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.url || !tab.url.includes('meesho.com')) return null;
+      const tabs = await chrome.tabs.query({ url: '*://*.meesho.com/*' });
+      const tab = tabs.find(t => t.url && t.url.includes('supplier.meesho.com'));
+      if (!tab) return null;
       
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_PAGE_DATA' });
       if (response?.success && response.data) return response.data;
@@ -850,12 +1083,12 @@
     const tone = DOM.listingTone.value;
 
     if (!hints && !currentListingImage) {
-      showToast('Please enter product details or upload an image.', 'error');
+      showToast('Please upload an image or enter product details.', 'error');
       return;
     }
 
     DOM.btnRunListing.disabled = true;
-    DOM.btnRunListing.innerHTML = '<span class="btn-icon">⏳</span> Generating listing...';
+    DOM.btnRunListing.innerHTML = '<span class="btn-icon">⏳</span> Analyzing image...';
 
     const success = await deductCredits(1);
     if (!success) {
@@ -864,23 +1097,60 @@
       return;
     }
 
-    await simulateDelay(1200);
+    let listing = null;
 
-    const listing = generateListingDraft({
-      rawInput: hints,
-      audienceOverride: audience,
-      priceGoal,
-      tone,
-      imageProfile: currentListingImage,
-    });
+    // If image is uploaded, use AI Vision to analyze the product
+    if (currentListingImage && currentListingImage.dataUrl) {
+      try {
+        DOM.btnRunListing.innerHTML = '<span class="btn-icon">🔍</span> AI analyzing product image...';
+        const visionResult = await callVisionAPI({
+          image: currentListingImage.dataUrl,
+          hints,
+          audience,
+          priceGoal,
+          tone,
+        });
+
+        if (visionResult) {
+          listing = {
+            title: visionResult.title || '',
+            description: visionResult.description || '',
+            category: visionResult.category || '',
+            mainCategory: (visionResult.category || '').split('>')[0]?.trim() || '',
+            subcategory: (visionResult.category || '').split('>')[1]?.trim() || '',
+            keywords: visionResult.keywords || [],
+            tags: visionResult.tags || [],
+            audience: visionResult.audience || audience,
+            color: visionResult.color || currentListingImage.colorName,
+            material: visionResult.material || 'Premium',
+            style: 'Classic',
+            priceGoal,
+          };
+        }
+      } catch (err) {
+        console.warn('[DASHBOARD] Vision API failed, falling back to local:', err.message);
+        showToast('AI Vision failed, using local analysis. Check console for details.', 'warning');
+      }
+    }
+
+    // Fallback to local heuristic generation if vision API fails or no image
+    if (!listing) {
+      await simulateDelay(800);
+      listing = generateListingDraft({
+        rawInput: hints,
+        audienceOverride: audience,
+        priceGoal,
+        tone,
+        imageProfile: currentListingImage,
+      });
+    }
 
     lastGeneratedListing = listing;
 
-    // Move to Step 2
-    setWorkflowStep(2);
+    // Move to Step 3 (Results + Apply)
+    setWorkflowStep(3);
 
     DOM.resultListing.innerHTML = renderListingResult(listing);
-    DOM.resultListing.classList.add('active');
 
     // Wire up result action buttons
     setupResultActions(listing);
@@ -891,6 +1161,33 @@
     DOM.btnRunListing.innerHTML = '<span class="btn-icon">🧠</span> Generate Listing — 1 Credit';
     showToast('Listing generated! Review and apply to Meesho.', 'success');
   });
+
+  // Call Vision API to analyze product image (direct fetch, not proxied)
+  async function callVisionAPI({ image, hints, audience, priceGoal, tone }) {
+    const url = CONFIG.ANALYZE_IMAGE_URL;
+    if (!url) throw new Error('ANALYZE_IMAGE_URL not configured');
+
+    // Compress image to reduce payload size
+    const compressedImage = await compressImageForAPI(image);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: compressedImage, hints, audience, priceGoal, tone }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error('[VISION] API response error:', response.status, errBody);
+      throw new Error(`Vision API error ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (!result.success || !result.data) {
+      throw new Error(result.error || 'Vision API returned no data');
+    }
+    return result.data;
+  }
 
   function renderListingResult(listing) {
     return `<div class="listing-result-container">
@@ -994,8 +1291,10 @@
     const btnNew = document.getElementById('btn-generate-new');
     if (btnNew) {
       btnNew.addEventListener('click', () => {
-        setWorkflowStep(1);
+        currentListingImage = null;
+        DOM.listingImage.value = '';
         lastGeneratedListing = null;
+        setWorkflowStep(1);
       });
     }
 
@@ -1009,31 +1308,107 @@
         setWorkflowStep(3);
 
         try {
-          // Send listing data to content script via chrome.tabs
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          // Find the Meesho supplier tab across ALL windows
+          const tabs = await chrome.tabs.query({ url: '*://*.meesho.com/*' });
+          const meeshoTab = tabs.find(t => t.url && t.url.includes('supplier.meesho.com'));
 
-          if (!tab || !tab.url || !tab.url.includes('meesho.com')) {
-            showAutoFillStatus('error', 'Please open Meesho Supplier Panel (supplier.meesho.com) in a tab first, then click Auto Fill again.');
+          if (!meeshoTab) {
+            showAutoFillStatus('error', 'Meesho Supplier Panel tab nahi mila. Pehle supplier.meesho.com kholo, phir Auto Fill karo.');
             btnAutoFill.disabled = false;
             btnAutoFill.textContent = '🚀 Auto Fill Meesho Listing';
             return;
           }
 
-          await chrome.tabs.sendMessage(tab.id, {
-            action: 'AUTO_FILL_LISTING',
-            data: {
-              title: listing.title,
-              description: listing.description,
-              keywords: listing.keywords,
-              tags: listing.tags,
-              category: listing.category,
-            },
-          });
+          // Ensure content script is injected (handles case where tab was opened before extension)
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: meeshoTab.id },
+              files: ['config.js', 'settings.js', 'supabase.js', 'supabaseClient.js', 'authManager.js', 'meeshoApi.js', 'ui.js', 'content.js'],
+            });
+          } catch (injectErr) {
+            // Script may already be loaded — that's OK
+            console.log('[DASHBOARD] Content script inject (may already exist):', injectErr.message);
+          }
+
+          // Small delay to let injected script initialize
+          await new Promise(r => setTimeout(r, 300));
+
+          const autoFillData = {
+            title: listing.title,
+            description: listing.description,
+            keywords: listing.keywords,
+            tags: listing.tags,
+            category: listing.category,
+          };
+
+          // Try sendMessage first — if content script listener is active
+          let response;
+          try {
+            response = await chrome.tabs.sendMessage(meeshoTab.id, {
+              action: 'AUTO_FILL_LISTING',
+              data: autoFillData,
+            });
+          } catch (msgErr) {
+            console.warn('[DASHBOARD] sendMessage failed, using executeScript fallback:', msgErr.message);
+            // Fallback: directly execute auto-fill logic in the tab
+            await chrome.scripting.executeScript({
+              target: { tabId: meeshoTab.id },
+              func: (data) => {
+                const setFieldValue = (element, value) => {
+                  if (!element) return false;
+                  const isTextarea = element.tagName === 'TEXTAREA';
+                  const proto = isTextarea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                  const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                  if (nativeSetter) nativeSetter.call(element, value);
+                  else element.value = value;
+                  element.focus();
+                  element.dispatchEvent(new Event('input', { bubbles: true }));
+                  element.dispatchEvent(new Event('change', { bubbles: true }));
+                  element.dispatchEvent(new Event('blur', { bubbles: true }));
+                  return true;
+                };
+
+                const findField = (labelTexts, tagFilter = 'input,textarea') => {
+                  for (const label of document.querySelectorAll('label, span, div, p, h3, h4, h5, h6')) {
+                    const text = (label.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+                    for (const lt of labelTexts) {
+                      if (text === lt || (text.includes(lt) && text.length < lt.length + 20)) {
+                        for (const c of [label.parentElement, label.closest('div[class]'), label.parentElement?.parentElement, label.closest('div[class]')?.parentElement].filter(Boolean)) {
+                          const field = c.querySelector(tagFilter);
+                          if (field && field.offsetParent !== null) return field;
+                        }
+                      }
+                    }
+                  }
+                  return null;
+                };
+
+                // Fill title
+                if (data.title) {
+                  const titleEl = document.querySelector('input[name="product_name"], input[name="productName"], input[name="title"], input[placeholder*="Product" i], input[placeholder*="product name" i]')
+                    || findField(['product name', 'title'], 'input[type="text"], input:not([type])');
+                  if (titleEl) setFieldValue(titleEl, data.title);
+                }
+
+                // Fill description
+                if (data.description) {
+                  const descEl = document.querySelector('textarea[name="description"], textarea[placeholder*="description" i]')
+                    || findField(['description', 'product description'], 'textarea');
+                  if (descEl) setFieldValue(descEl, data.description);
+                }
+
+                console.log('🚀 Auto-fill executed via scripting fallback');
+              },
+              args: [autoFillData],
+            });
+            response = { success: true };
+          }
 
           showAutoFillStatus('success', 'Listing data sent to Meesho! Check your listing page — title, description and keywords have been filled automatically.');
           showToast('Auto Fill complete! Check your Meesho listing page.', 'success');
         } catch (err) {
-          showAutoFillStatus('error', 'Could not auto-fill. Make sure you have a Meesho listing page open and try again.');
+          console.error('[DASHBOARD] Auto-fill error:', err);
+          showAutoFillStatus('error', `Could not auto-fill: ${err.message}. Make sure Meesho catalog page open hai aur form visible hai.`);
         }
 
         btnAutoFill.disabled = false;
@@ -2132,6 +2507,30 @@
       colorName,
       colorHex: rgbToHex(sample.r, sample.g, sample.b),
     };
+  }
+
+  // Compress image to max 1024px for API calls (keeps payload small)
+  function compressImageForAPI(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1024;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          const ratio = Math.min(MAX / w, MAX / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = () => reject(new Error('Image compression failed'));
+      img.src = dataUrl;
+    });
   }
 
   function readFileAsDataUrl(file) {

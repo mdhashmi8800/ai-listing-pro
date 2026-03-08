@@ -149,7 +149,7 @@
             </div>
           </div>
 
-          <!-- Step 1: Input -->
+          <!-- Step 1: Upload Image -->
           <div class="step-panel active" id="step-1-panel">
             <div class="dash-card">
               <div class="dash-card-title">
@@ -167,22 +167,33 @@
                   </div>
                   <p class="upload-text">Drag &amp; drop image here</p>
                   <p class="upload-subtext">or click to browse (JPG, PNG, WebP)</p>
-                  <input class="upload-input" type="file" id="listing-image" accept="image/*">
                 </div>
+                <input class="upload-input" type="file" id="listing-image" accept="image/*">
               </div>
-              <div class="image-preview-bar hidden" id="image-preview-bar">
+            </div>
+          </div>
+
+          <!-- Step 2: Configure & Generate -->
+          <div class="step-panel" id="step-2-panel">
+            <div class="dash-card">
+              <div class="dash-card-title">
+                <span class="card-icon">⚙️</span>
+                Configure &amp; Generate
+              </div>
+              <!-- Uploaded image mini-preview -->
+              <div class="image-preview-bar" id="image-preview-bar">
                 <img id="listing-preview-image" class="preview-thumb" alt="Product preview">
                 <div class="preview-info">
                   <span class="preview-name" id="preview-file-name">image.jpg</span>
                   <span class="preview-meta" id="preview-meta">—</span>
                 </div>
-                <button class="preview-remove" id="btn-remove-image" title="Remove">✕</button>
+                <button class="preview-remove" id="btn-remove-image" title="Remove image &amp; go back">✕</button>
               </div>
 
               <div class="input-extras">
                 <div class="dash-input-row">
                   <div class="dash-input-group">
-                    <label class="dash-label">Product Hints</label>
+                    <label class="dash-label">Product Hints (optional)</label>
                     <input class="dash-input" type="text" id="listing-hints" placeholder="e.g. rayon kurti festive">
                   </div>
                   <div class="dash-input-group">
@@ -221,8 +232,8 @@
             </div>
           </div>
 
-          <!-- Step 2 & 3: Results + Auto Fill -->
-          <div class="step-panel" id="step-2-panel">
+          <!-- Step 3: Results + Apply -->
+          <div class="step-panel" id="step-3-panel">
             <div class="result-preview-card" id="result-listing">
               <!-- Filled by JS -->
             </div>
@@ -541,14 +552,12 @@
             </div>
 
             <div class="payment-inline-card">
-              <div class="payment-section-head">
-                <span class="payment-section-title">Choose Your Plan</span>
-                <span class="payment-section-note">Unlock all AI tools</span>
+              <div class="payment-plan-list" id="payment-plan-list">
+                <!-- Tabs + Plans rendered by JS -->
               </div>
-              <div class="payment-plan-list" id="payment-plan-list"></div>
             </div>
 
-            <div class="payment-status" id="payment-status">Pick a plan to start checkout.</div>
+            <div class="payment-status" id="payment-status">Pick a plan or credit pack to start checkout.</div>
           </div>
         </div>
       </section>
