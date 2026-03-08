@@ -76,6 +76,10 @@ class MeeshoCreditsOptimizer {
                     this.autoFillMeeshoListing(message.data);
                     sendResponse({ success: true });
                 }
+                if (message.action === 'GET_PAGE_DATA') {
+                    const pageData = this.readMeeshoPageData();
+                    sendResponse({ success: true, data: pageData });
+                }
                 return true;
             });
         } catch (e) {
@@ -151,120 +155,143 @@ class MeeshoCreditsOptimizer {
         // Helper: set value on an input/textarea and trigger React change events
         const setFieldValue = (element, value) => {
             if (!element) return false;
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-            )?.set || Object.getOwnPropertyDescriptor(
-                window.HTMLTextAreaElement.prototype, 'value'
-            )?.set;
 
-            if (nativeInputValueSetter) {
-                nativeInputValueSetter.call(element, value);
+            // Use native setter to bypass React's controlled input
+            const isTextarea = element.tagName === 'TEXTAREA';
+            const proto = isTextarea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+            const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+
+            if (nativeSetter) {
+                nativeSetter.call(element, value);
             } else {
                 element.value = value;
             }
 
+            // Focus first, then fire all events React listens to
+            element.focus();
             element.dispatchEvent(new Event('input', { bubbles: true }));
             element.dispatchEvent(new Event('change', { bubbles: true }));
             element.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            // Also fire React synthetic event via key simulation
+            element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ' }));
+            element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ' ' }));
+
             return true;
         };
 
-        // Strategy 1: Try common Meesho form selectors
-        const titleSelectors = [
-            'input[name="product_name"]',
-            'input[name="productName"]',
-            'input[name="title"]',
-            'input[placeholder*="product name" i]',
-            'input[placeholder*="title" i]',
-            'input[data-testid*="product-name"]',
-            'input[data-testid*="title"]',
-        ];
+        // Helper: find input/textarea near a label with specific text
+        const findFieldNearLabel = (labelTexts, tagFilter = 'input,textarea') => {
+            const allLabels = document.querySelectorAll('label, span, div, p, h3, h4, h5, h6');
+            for (const label of allLabels) {
+                const text = (label.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+                for (const lt of labelTexts) {
+                    if (text === lt || (text.includes(lt) && text.length < lt.length + 20)) {
+                        // Search in parent, then siblings, then grandparent
+                        const searchContainers = [
+                            label.parentElement,
+                            label.closest('div[class]'),
+                            label.parentElement?.parentElement,
+                            label.closest('div[class]')?.parentElement,
+                        ].filter(Boolean);
 
-        const descSelectors = [
-            'textarea[name="description"]',
-            'textarea[name="product_description"]',
-            'textarea[placeholder*="description" i]',
-            'textarea[data-testid*="description"]',
-        ];
+                        for (const container of searchContainers) {
+                            const field = container.querySelector(tagFilter);
+                            if (field && field.offsetParent !== null) return field;
+                        }
+                    }
+                }
+            }
+            return null;
+        };
 
-        // Fill title
+        // ── FILL TITLE (Product Name) ──
         if (data.title) {
+            const titleSelectors = [
+                'input[name="product_name"]', 'input[name="productName"]', 'input[name="title"]',
+                'input[placeholder*="product name" i]', 'input[placeholder*="title" i]',
+                'input[placeholder*="Product" i]',
+                'input[data-testid*="product-name"]', 'input[data-testid*="title"]',
+            ];
+
+            let titleFilled = false;
             for (const sel of titleSelectors) {
                 const el = document.querySelector(sel);
-                if (el) {
-                    if (setFieldValue(el, data.title)) {
-                        filled.push('title');
-                        break;
-                    }
+                if (el && el.offsetParent !== null) {
+                    titleFilled = setFieldValue(el, data.title);
+                    if (titleFilled) break;
                 }
             }
 
-            // Fallback: find any visible input near "Product Name" or "Title" label
-            if (!filled.includes('title')) {
-                const labels = document.querySelectorAll('label, span, div, p');
-                for (const label of labels) {
-                    const text = (label.textContent || '').trim().toLowerCase();
-                    if (text === 'product name' || text === 'title' || text.includes('product name')) {
-                        const parent = label.closest('div');
-                        if (parent) {
-                            const input = parent.querySelector('input[type="text"], input:not([type])');
-                            if (input && setFieldValue(input, data.title)) {
-                                filled.push('title');
-                                break;
-                            }
-                        }
-                    }
-                }
+            if (!titleFilled) {
+                const el = findFieldNearLabel(['product name', 'title'], 'input[type="text"], input:not([type])');
+                if (el) titleFilled = setFieldValue(el, data.title);
             }
+
+            if (titleFilled) filled.push('title');
         }
 
-        // Fill description
+        // ── FILL DESCRIPTION ──
         if (data.description) {
+            const descSelectors = [
+                'textarea[name="description"]', 'textarea[name="product_description"]',
+                'textarea[placeholder*="description" i]', 'textarea[placeholder*="Description" i]',
+                'textarea[data-testid*="description"]',
+            ];
+
+            let descFilled = false;
             for (const sel of descSelectors) {
                 const el = document.querySelector(sel);
-                if (el) {
-                    if (setFieldValue(el, data.description)) {
-                        filled.push('description');
-                        break;
-                    }
+                if (el && el.offsetParent !== null) {
+                    descFilled = setFieldValue(el, data.description);
+                    if (descFilled) break;
                 }
             }
 
-            if (!filled.includes('description')) {
+            if (!descFilled) {
+                const el = findFieldNearLabel(['description', 'enter description', 'product description'], 'textarea');
+                if (el) descFilled = setFieldValue(el, data.description);
+            }
+
+            // Last resort: try all visible textareas
+            if (!descFilled) {
                 const textareas = document.querySelectorAll('textarea');
                 for (const ta of textareas) {
-                    const parent = ta.closest('div');
-                    const parentText = parent ? (parent.textContent || '').toLowerCase() : '';
-                    if (parentText.includes('description')) {
-                        if (setFieldValue(ta, data.description)) {
-                            filled.push('description');
-                            break;
-                        }
+                    if (ta.offsetParent !== null && !ta.value.trim()) {
+                        descFilled = setFieldValue(ta, data.description);
+                        if (descFilled) break;
                     }
                 }
             }
+
+            if (descFilled) filled.push('description');
         }
 
-        // Fill keywords / search terms
+        // ── FILL KEYWORDS / SEARCH TERMS ──
         if (data.keywords && data.keywords.length > 0) {
             const kwSelectors = [
-                'input[name="keywords"]',
-                'input[name="search_keywords"]',
-                'input[placeholder*="keyword" i]',
-                'input[placeholder*="search term" i]',
-                'textarea[placeholder*="keyword" i]',
+                'input[name="keywords"]', 'input[name="search_keywords"]',
+                'input[placeholder*="keyword" i]', 'input[placeholder*="search term" i]',
+                'textarea[placeholder*="keyword" i]', 'input[placeholder*="tag" i]',
             ];
 
             const kwText = data.keywords.join(', ');
+            let kwFilled = false;
+
             for (const sel of kwSelectors) {
                 const el = document.querySelector(sel);
-                if (el) {
-                    if (setFieldValue(el, kwText)) {
-                        filled.push('keywords');
-                        break;
-                    }
+                if (el && el.offsetParent !== null) {
+                    kwFilled = setFieldValue(el, kwText);
+                    if (kwFilled) break;
                 }
             }
+
+            if (!kwFilled) {
+                const el = findFieldNearLabel(['keyword', 'search term', 'tags', 'search keyword'], 'input,textarea');
+                if (el) kwFilled = setFieldValue(el, kwText);
+            }
+
+            if (kwFilled) filled.push('keywords');
         }
 
         // Show notification to user
@@ -277,10 +304,73 @@ class MeeshoCreditsOptimizer {
         } else {
             console.warn('⚠️ Could not find Meesho form fields to fill');
             this._showAutoFillNotification(
-                '⚠️ Could not find form fields. Please make sure you are on a Meesho product listing/edit page.',
+                '⚠️ Could not find form fields. Make sure you are on a Meesho catalog/listing page and the form is visible.',
                 'warning'
             );
         }
+    }
+
+    // ── Read current Meesho page form data ────────────────────
+    readMeeshoPageData() {
+        const result = { productName: '', description: '', color: '', weight: '', price: '' };
+
+        // Helper to read value from input/textarea/select
+        const readField = (selectors) => {
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el && el.value && el.value.trim()) return el.value.trim();
+            }
+            return '';
+        };
+
+        // Helper to find input near a label text
+        const readNearLabel = (labelTexts, inputType = 'input') => {
+            const labels = document.querySelectorAll('label, span, div.label, div[class*="label"], p');
+            for (const label of labels) {
+                const text = (label.textContent || '').trim().toLowerCase();
+                for (const lt of labelTexts) {
+                    if (text === lt || text.includes(lt)) {
+                        const parent = label.closest('div[class]') || label.parentElement;
+                        if (parent) {
+                            const input = parent.querySelector(`${inputType}[type="text"], ${inputType}:not([type]), textarea, select`);
+                            if (input && input.value && input.value.trim()) return input.value.trim();
+                        }
+                    }
+                }
+            }
+            return '';
+        };
+
+        // Product Name
+        result.productName = readField([
+            'input[name="product_name"]', 'input[name="productName"]', 'input[name="title"]',
+            'input[placeholder*="product name" i]', 'input[placeholder*="title" i]',
+        ]) || readNearLabel(['product name', 'title']);
+
+        // Description
+        result.description = readField([
+            'textarea[name="description"]', 'textarea[name="product_description"]',
+            'textarea[placeholder*="description" i]',
+        ]) || readNearLabel(['description'], 'textarea');
+
+        // Color
+        result.color = readField([
+            'select[name="color"]', 'input[name="color"]',
+        ]) || readNearLabel(['color']);
+
+        // Net Weight
+        result.weight = readField([
+            'input[name="net_weight"]', 'input[name="weight"]',
+            'input[placeholder*="weight" i]',
+        ]) || readNearLabel(['net weight', 'weight']);
+
+        // Price / MRP
+        result.price = readField([
+            'input[name="price"]', 'input[name="mrp"]', 'input[name="selling_price"]',
+            'input[placeholder*="price" i]', 'input[placeholder*="mrp" i]',
+        ]) || readNearLabel(['price', 'mrp', 'selling price']);
+
+        return result;
     }
 
     _showAutoFillNotification(message, type = 'success') {

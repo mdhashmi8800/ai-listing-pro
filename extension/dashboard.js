@@ -549,6 +549,13 @@
     try {
       setPaymentStatus(`Creating ${plan.name} order...`, 'info');
 
+      console.log("CHECKOUT DATA", {
+        user_id: currentUser.id,
+        plan: plan.id,
+        duration_days: plan.duration_days,
+        amount: plan.price
+      });
+
       const response = await bgFetch(CONFIG.CREATE_ORDER_URL, {
         method: 'POST',
         headers: {
@@ -592,7 +599,7 @@
         + '&amount=' + encodeURIComponent(order.amount)
         + '&key=' + encodeURIComponent(CONFIG.RAZORPAY_KEY_ID)
         + '&phone=' + encodeURIComponent(phone)
-        + '&plan=' + encodeURIComponent(plan.name)
+        + '&plan=' + encodeURIComponent(plan.id)
         + '&user_id=' + encodeURIComponent(currentUser.id)
         + '&plan_id=' + encodeURIComponent(plan.id)
         + '&duration_days=' + encodeURIComponent(plan.duration_days || '');
@@ -701,21 +708,24 @@
       return false;
     }
 
-    const { error } = await sbClient
-      .from('profiles')
-      .update({
-        credits: currentCredits - amount,
-        total_optimizations: (userProfile.total_optimizations || 0) + 1,
-      })
-      .eq('id', currentUser.id);
+    // Use the atomic deduct_credit RPC for safe deduction
+    const { data, error } = await sbClient.rpc('deduct_credit', { amount });
 
     if (error) {
-      showToast('Failed to deduct credits. Try again.', 'error');
+      const msg = error.message || '';
+      if (msg.includes('insufficient_credits')) {
+        showToast('Not enough credits! Please buy more.', 'error');
+      } else if (msg.includes('account_banned')) {
+        showToast('Your account has been suspended.', 'error');
+      } else {
+        console.error('[DASHBOARD] Credit deduction error:', error);
+        showToast('Failed to deduct credits. Try again.', 'error');
+      }
       return false;
     }
 
-    userProfile.credits = currentCredits - amount;
-    userProfile.total_optimizations = (userProfile.total_optimizations || 0) + 1;
+    // Update local state with the returned remaining credits
+    userProfile.credits = typeof data === 'number' ? data : currentCredits - amount;
     updateUI();
     return true;
   }
@@ -802,6 +812,35 @@
   }
 
   // ══════════════════════════════════════
+  //  READ MEESHO PAGE DATA
+  // ══════════════════════════════════════
+  async function readMeeshoPageData() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.includes('meesho.com')) return null;
+      
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_PAGE_DATA' });
+      if (response?.success && response.data) return response.data;
+    } catch (e) {
+      console.warn('[DASHBOARD] Could not read Meesho page data:', e.message);
+    }
+    return null;
+  }
+
+  async function autoPopulateFromMeesho() {
+    const pageData = await readMeeshoPageData();
+    if (!pageData) return;
+
+    if (pageData.productName && !DOM.listingHints.value.trim()) {
+      DOM.listingHints.value = pageData.productName;
+      DOM.meeshoContext.textContent = 'Meesho Supplier Panel · Auto-detected product';
+    }
+    if (pageData.price && !DOM.listingPriceGoal.value) {
+      DOM.listingPriceGoal.value = pageData.price;
+    }
+  }
+
+  // ══════════════════════════════════════
   //  AI LISTING GENERATOR (MAIN TOOL)
   // ══════════════════════════════════════
   DOM.btnRunListing.addEventListener('click', async () => {
@@ -810,8 +849,8 @@
     const priceGoal = parseFloat(DOM.listingPriceGoal.value) || 0;
     const tone = DOM.listingTone.value;
 
-    if (!currentListingImage) {
-      showToast('Please upload a product image first.', 'error');
+    if (!hints && !currentListingImage) {
+      showToast('Please enter product details or upload an image.', 'error');
       return;
     }
 
@@ -859,6 +898,15 @@
     <h3>✅ AI Generated Listing</h3>
     <span class="listing-result-badge">Ready to Apply</span>
   </div>
+
+  <!-- PROMINENT APPLY BUTTON AT TOP -->
+  <div style="padding: 0 20px; margin-bottom: 4px;">
+    <button class="btn-autofill" id="btn-autofill-meesho" style="width:100%;padding:14px 20px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 15px rgba(124,58,237,0.4);transition:all 0.2s ease;">
+      🚀 Apply to Meesho Page — Auto Fill All Fields
+    </button>
+    <div id="autofill-status" style="margin-top:8px;"></div>
+  </div>
+
   <div class="listing-result-body">
     <div class="result-field">
       <div class="result-field-label">Title</div>
@@ -896,11 +944,7 @@
       <button class="btn-generate-new" id="btn-generate-new">
         🔄 Generate New
       </button>
-      <button class="btn-autofill" id="btn-autofill-meesho">
-        🚀 Auto Fill Meesho Listing
-      </button>
     </div>
-    <div id="autofill-status"></div>
   </div>
 </div>`;
   }
@@ -1562,6 +1606,8 @@
   <div class="result-metric-row"><span>Credits Used</span><strong>${creditCost}</strong></div>
 </div>`;
 
+    const bulkListings = [];
+
     products.forEach((product, i) => {
       const listing = generateListingDraft({
         rawInput: product,
@@ -1571,24 +1617,70 @@
         imageProfile: null,
       });
 
+      bulkListings.push(listing);
+
       resultHTML += `<div class="bulk-result-card">
   <div class="bulk-result-head">
     <span class="bulk-index">${i + 1}</span>
-    <div>
+    <div style="flex:1">
       <strong>${escapeHtml(listing.title)}</strong>
       <div class="bulk-source">Source: ${escapeHtml(product)}</div>
     </div>
+    <button class="btn-copy-all" data-bulk-copy="${i}" style="font-size:11px;padding:4px 10px;" title="Copy this listing">📋</button>
+    <button class="btn-autofill" data-bulk-apply="${i}" style="font-size:11px;padding:4px 10px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;border-radius:6px;cursor:pointer;" title="Apply to Meesho">🚀 Apply</button>
   </div>
   <div class="bulk-meta-grid">
     <div><span>Category</span><strong>${escapeHtml(listing.category)}</strong></div>
     <div><span>Tags</span><strong>${escapeHtml(listing.tags.slice(0, 3).join(', '))}</strong></div>
   </div>
+  <div style="font-size:11px;color:var(--text-secondary);margin:6px 0;">📝 ${escapeHtml(listing.description.substring(0, 120))}...</div>
   <div class="chip-row">${renderChipList(listing.keywords)}</div>
 </div>`;
     });
 
     DOM.resultBulk.innerHTML = resultHTML;
     DOM.resultBulk.classList.add('active');
+
+    // Wire up bulk copy/apply buttons
+    document.querySelectorAll('[data-bulk-copy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.bulkCopy);
+        const l = bulkListings[idx];
+        if (!l) return;
+        const text = `Title: ${l.title}\nDescription: ${l.description}\nKeywords: ${l.keywords.join(', ')}\nTags: ${l.tags.join(', ')}`;
+        copyToClipboard(text);
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '📋'; }, 2000);
+        showToast('Listing copied!', 'success');
+      });
+    });
+
+    document.querySelectorAll('[data-bulk-apply]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const idx = parseInt(btn.dataset.bulkApply);
+        const l = bulkListings[idx];
+        if (!l) return;
+        btn.disabled = true;
+        btn.textContent = '⏳';
+        try {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab && tab.url && tab.url.includes('meesho.com')) {
+            await chrome.tabs.sendMessage(tab.id, {
+              action: 'AUTO_FILL_LISTING',
+              data: { title: l.title, description: l.description, keywords: l.keywords, tags: l.tags, category: l.category },
+            });
+            showToast('Applied to Meesho page!', 'success');
+          } else {
+            showToast('Open a Meesho listing page first.', 'error');
+          }
+        } catch (e) {
+          showToast('Could not apply. Check Meesho tab.', 'error');
+        }
+        btn.disabled = false;
+        btn.textContent = '🚀 Apply';
+      });
+    });
+
     addHistoryEntry('Bulk Listing Generator', `${products.length} products`, `${creditCost} Credits`);
 
     DOM.btnRunBulk.disabled = false;
@@ -2154,4 +2246,5 @@
   await loadHistory();
   await initSession();
   navigateToHash();
+  autoPopulateFromMeesho();
 })();
