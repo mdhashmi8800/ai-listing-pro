@@ -21,6 +21,12 @@ const AuthManager = {
     _sb: null,   // Supabase SDK client reference
     _authChangeListener: null,
 
+    _isFutureTimestamp: function (value) {
+        if (!value) return false;
+        const parsed = new Date(value);
+        return !Number.isNaN(parsed.getTime()) && parsed > new Date();
+    },
+
     // ══════════════════════════════════════════════════════════
     //  SETUP
     // ══════════════════════════════════════════════════════════
@@ -461,7 +467,7 @@ const AuthManager = {
         try {
             // Check if user already exists
             const checkRes = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${this.user.id}&select=credits`,
+                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${this.user.id}&select=id,unlimited_until`,
                 {
                     headers: {
                         apikey: CONFIG.SUPABASE_ANON_KEY,
@@ -478,8 +484,8 @@ const AuthManager = {
             const existing = await checkRes.json();
 
             if (!existing || existing.length === 0) {
-                // ── NEW USER — create with signup credits
-                console.log(`✨ New user! Giving ${CONFIG.DEFAULT_SIGNUP_CREDITS} signup credits`);
+                // ── NEW USER — create profile
+                console.log(`✨ New user! Creating profile`);
 
                 const createRes = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/profiles`, {
                     method: "POST",
@@ -492,8 +498,7 @@ const AuthManager = {
                     body: JSON.stringify({
                         id: this.user.id,
                         email: this.user.email || null,
-                        name: this.user.name || null,
-                        credits: CONFIG.DEFAULT_SIGNUP_CREDITS
+                        name: this.user.name || null
                     })
                 });
 
@@ -503,15 +508,13 @@ const AuthManager = {
                     return;
                 }
 
-                this.user.credits = CONFIG.DEFAULT_SIGNUP_CREDITS;
                 console.log("✅ New user created in DB");
 
             } else {
-                // ── RETURNING USER — read credits from DB
+                // ── RETURNING USER
                 const dbUser = existing[0];
-                console.log("✅ Returning user, credits:", dbUser.credits);
-
-                this.user.credits = dbUser.credits;
+                this.user.unlimitedUntil = dbUser.unlimited_until || null;
+                console.log("✅ Returning user");
             }
 
             // ── Persist enriched user to chrome.storage.local
@@ -524,17 +527,15 @@ const AuthManager = {
     },
 
     // ══════════════════════════════════════════════════════════
-    //  CREDITS
+    //  SUBSCRIPTION
     // ══════════════════════════════════════════════════════════
 
     /**
-     * Refresh credits (and ban/plan status) from DB.
-     * Call after any AI action to show updated balance.
+     * Refresh subscription status from DB.
      */
     refreshUser: async function () {
         if (!this.user?.id) return this.user;
 
-        // ── Get access token: prefer Supabase SDK session ──
         let token = null;
         if (this._sb) {
             try {
@@ -550,7 +551,7 @@ const AuthManager = {
 
         try {
             const res = await fetch(
-                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${this.user.id}&select=credits`,
+                `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${this.user.id}&select=unlimited_until`,
                 {
                     headers: {
                         apikey: CONFIG.SUPABASE_ANON_KEY,
@@ -562,7 +563,29 @@ const AuthManager = {
             if (res.ok) {
                 const data = await res.json();
                 if (data?.[0]) {
-                    this.user.credits = data[0].credits;
+                    this.user.unlimitedUntil = data[0].unlimited_until || null;
+
+                    if (!this._isFutureTimestamp(this.user.unlimitedUntil)) {
+                        const subRes = await fetch(
+                            `${CONFIG.SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${this.user.id}&status=eq.active&select=plan_name,plan,end_date&order=end_date.desc&limit=1`,
+                            {
+                                headers: {
+                                    apikey: CONFIG.SUPABASE_ANON_KEY,
+                                    Authorization: `Bearer ${token}`
+                                }
+                            }
+                        );
+
+                        if (subRes.ok) {
+                            const subData = await subRes.json();
+                            const activeSubscription = Array.isArray(subData) ? subData[0] : null;
+                            if (activeSubscription?.end_date && this._isFutureTimestamp(activeSubscription.end_date)) {
+                                this.user.unlimitedUntil = activeSubscription.end_date;
+                                this.user.plan = activeSubscription.plan_name || activeSubscription.plan || this.user.plan;
+                            }
+                        }
+                    }
+
                     await chrome.storage.local.set({ user: this.user });
                 }
             }
@@ -598,14 +621,8 @@ const AuthManager = {
 
         if (this.hasUnlimitedAccess()) return true;
 
-        // Live credit check via background.js → profiles table
-        const hasCredits = await CreditsManager.hasCredits(1);
-        if (!hasCredits) {
-            if (showError) alert("⚡ Credits khatam ho gaye!\nUpgrade karo ya credits kharido.");
-            return false;
-        }
-
-        return true;
+        if (showError) alert("⚡ No active subscription!\nPlease subscribe to use AI tools.");
+        return false;
     },
 
     // ══════════════════════════════════════════════════════════
@@ -614,7 +631,7 @@ const AuthManager = {
 
     isLoggedIn: function () { return this.user !== null; },
     getUser: function () { return this.user; },
-    getCredits: function () { return this.user?.credits ?? 0; },
+    getCredits: function () { return this.hasUnlimitedAccess() ? 999 : 0; },
     getPlan: function () { return this.user?.plan ?? "free"; },
     isBanned: function () { return this.user?.is_banned === true; },
 
@@ -686,7 +703,7 @@ const AuthManager = {
             name: meta.full_name || meta.name || (authUser.email?.split("@")[0]) || "User",
             avatarUrl: meta.avatar_url || meta.picture || null,
             // DB fields (populated after syncUserToDB)
-            credits: dbUser?.credits ?? CONFIG.DEFAULT_SIGNUP_CREDITS,
+            credits: 0,
             plan: dbUser?.plan ?? "free",
             unlimitedUntil: dbUser?.unlimited_until ?? null,
             is_banned: dbUser?.is_banned ?? false,
@@ -797,97 +814,23 @@ const CreditsManager = {
         });
     },
 
-    // Get current credits — always returns a number
-    // Fetches LIVE from Supabase session (source of truth)
+    // Subscription-only: always returns true if subscribed
     getCredits: async function () {
-        try {
-            const supabase = window.supabaseClient;
-            if (!supabase) {
-                console.warn('❌ supabaseClient not available, falling back to background');
-                const res = await this._bgMessage({ action: 'GET_CREDITS' });
-                if (!res || !res.success) return 0;
-                return res.credits ?? 0;
-            }
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return 0;
-            const userId = session.user.id;
-
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('credits')
-                .eq('id', userId)
-                .single();
-
-            if (error || !data) return 0;
-            return data.credits ?? 0;
-        } catch (e) {
-            console.error('getCredits error:', e);
-            return 0;
-        }
-    },
-
-    // Check if user has enough credits (live check via background)
-    hasCredits: async function (amount = 1) {
         const res = await this._bgMessage({ action: 'GET_CREDITS' });
-        if (!res || !res.success) return false;
-        return (res.credits ?? 0) >= amount;
+        return res?.hasSubscription ? 999 : 0;
     },
 
-    // Use / deduct credits — via Supabase RPC deduct_credit
-    useCredits: async function (amount = 1) {
-        try {
-            const supabase = window.supabaseClient;
-            if (!supabase) {
-                console.warn('❌ supabaseClient not available, falling back to background');
-                const res = await this._bgMessage({ action: 'DEDUCT_CREDITS', amount });
-                if (!res) return { success: false, error: 'Background unreachable', remaining: 0 };
-                return { success: !!res.success, remaining: res.remaining ?? 0, error: res.error || null };
-            }
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return { success: false, error: 'No session', remaining: 0 };
-            const userId = session.user.id;
-
-            const { data, error } = await supabase.rpc('deduct_credit', {
-                uid: userId,
-                amount: amount
-            });
-
-            if (error) {
-                return { success: false, error: error.message, remaining: 0 };
-            }
-            return { success: true, remaining: data ?? 0, error: null };
-        } catch (e) {
-            console.error('useCredits error:', e);
-            return { success: false, error: e.message, remaining: 0 };
-        }
+    hasCredits: async function (_amount = 1) {
+        const res = await this._bgMessage({ action: 'GET_CREDITS' });
+        return !!res?.hasSubscription;
     },
 
-    // Add credits — proxied through background PROXY_FETCH to profiles table
-    addCredits: async function (amount, source = 'purchase') {
-        // First get current credits
-        const current = await this.getCredits();
-        const newCredits = current + amount;
+    useCredits: async function (_amount = 1) {
+        return { success: true, remaining: 999, error: null };
+    },
 
-        // Use PROXY_FETCH to PATCH profiles (background has the session)
-        const res = await this._bgMessage({
-            action: 'PROXY_FETCH',
-            url: `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${AuthManager.getUser()?.id}`,
-            options: {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Prefer': 'return=representation'
-                },
-                body: JSON.stringify({ credits: newCredits })
-            }
-        });
-
-        if (res?.success && res?.ok) {
-            const updated = Array.isArray(res.body) ? res.body[0]?.credits : newCredits;
-            return { success: true, credits: updated ?? newCredits };
-        }
-        return { success: false, error: res?.error || 'Failed to add credits' };
+    addCredits: async function (_amount, _source) {
+        return { success: true, credits: 999 };
     },
 
     // Set unlimited subscription (proxy through background)
@@ -920,124 +863,19 @@ const CreditsManager = {
         return { success: false, error: 'Failed to set unlimited' };
     },
 
-    // Apply promo code (proxy all Supabase calls through background)
-    applyPromoCode: async function (code) {
-        const user = AuthManager.getUser();
-        if (!user) return { success: false, error: 'Not logged in' };
-
-        try {
-            // Check promo code
-            const promoRes = await this._bgMessage({
-                action: 'PROXY_FETCH',
-                url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_codes?code=eq.${code.toUpperCase()}&is_active=eq.true&select=*`,
-                options: {
-                    method: 'GET',
-                    headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY }
-                }
-            });
-
-            const promos = promoRes?.body;
-            if (!promos || !Array.isArray(promos) || promos.length === 0) {
-                return { success: false, error: 'Invalid or expired promo code' };
-            }
-            const promo = promos[0];
-
-            // Check if already used by this user
-            const usageRes = await this._bgMessage({
-                action: 'PROXY_FETCH',
-                url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_usage?user_id=eq.${user.id}&promo_id=eq.${promo.id}&select=id`,
-                options: {
-                    method: 'GET',
-                    headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY }
-                }
-            });
-            const usages = usageRes?.body;
-            if (usages && Array.isArray(usages) && usages.length > 0) {
-                return { success: false, error: 'You have already used this promo code' };
-            }
-
-            // Check max uses
-            if (promo.max_uses && promo.used_count >= promo.max_uses) {
-                return { success: false, error: 'Promo code has reached maximum uses' };
-            }
-
-            // Apply credits
-            const creditGrant = (promo.type === 'unlimited') ? (promo.credits || 100) : promo.credits;
-            const result = await this.addCredits(creditGrant, 'promo');
-
-            if (result.success) {
-                // Record usage (fire-and-forget)
-                this._bgMessage({
-                    action: 'PROXY_FETCH',
-                    url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_usage`,
-                    options: {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': CONFIG.SUPABASE_ANON_KEY
-                        },
-                        body: JSON.stringify({
-                            user_id: user.id,
-                            promo_id: promo.id,
-                            used_at: new Date().toISOString()
-                        })
-                    }
-                });
-
-                // Update promo used count (fire-and-forget)
-                this._bgMessage({
-                    action: 'PROXY_FETCH',
-                    url: `${CONFIG.SUPABASE_URL}/rest/v1/promo_codes?id=eq.${promo.id}`,
-                    options: {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': CONFIG.SUPABASE_ANON_KEY
-                        },
-                        body: JSON.stringify({ used_count: (promo.used_count || 0) + 1 })
-                    }
-                });
-
-                return {
-                    success: true,
-                    message: `🎉 ${creditGrant} credits added!`,
-                    credits: creditGrant,
-                    type: promo.type
-                };
-            }
-            return result;
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
+    applyPromoCode: async function (_code) {
+        return { success: false, error: 'Promo codes are no longer supported. Please subscribe.' };
     },
 
-    // Log usage — no longer needed in content.js, background handles it in DEDUCT_CREDITS
-    logUsage: async function (_credits) {
-        // No-op: usage logging is handled inside background.js DEDUCT_CREDITS handler
-    },
+    logUsage: async function (_credits) { },
 
-    // Get credits display text
     getCreditsDisplay: async function () {
-        const credits = await this.getCredits();
-        return `${credits} credits`;
+        const has = await this.hasCredits();
+        return has ? 'Subscribed ✅' : 'No Subscription';
     },
 
-    // Get user transaction history (proxy through background)
-    getHistory: async function (limit = 20) {
-        const user = AuthManager.getUser();
-        if (!user) return [];
-        try {
-            const res = await this._bgMessage({
-                action: 'PROXY_FETCH',
-                url: `${CONFIG.SUPABASE_URL}/rest/v1/credit_transactions?user_id=eq.${user.id}&select=delta,reason,meta,created_at&order=created_at.desc&limit=${limit}`,
-                options: {
-                    method: 'GET',
-                    headers: { 'apikey': CONFIG.SUPABASE_ANON_KEY }
-                }
-            });
-            if (res?.success && Array.isArray(res.body)) return res.body;
-            return [];
-        } catch (e) { return []; }
+    getHistory: async function (_limit) {
+        return [];
     }
 };
 

@@ -28,7 +28,6 @@ export default async function handler(req, res) {
     duration_days,
     amount,
     phone,
-    credits_to_add,
   } = req.body || {};
 
   // Normalise plan name — extension may send plan_type or plan
@@ -46,7 +45,6 @@ export default async function handler(req, res) {
       duration_days,
       amount,
       phone,
-      credits_to_add,
     })
   );
 
@@ -109,7 +107,7 @@ export default async function handler(req, res) {
       .upsert(
         {
           user_id,
-          plan: planName,
+          plan_name: planName,
           status: "active",
           start_date: startDate.toISOString(),
           end_date: endDate.toISOString(),
@@ -126,19 +124,27 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to save subscription" });
     }
 
-    // ── 2. Update user plan in profiles ────────────────────
-    await supabase
+    // ── 2. Upsert user plan/access in profiles ─────────────
+    const { error: profileError } = await supabase
       .from("profiles")
-      .update({ plan: planName, updated_at: new Date().toISOString() })
-      .eq("id", user_id);
+      .upsert({
+        id: user_id,
+        plan: planName,
+        unlimited_until: endDate.toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+
+    if (profileError) {
+      console.error("[verify-payment] Profile upsert error:", profileError);
+      return res.status(500).json({ error: "Failed to activate user profile" });
+    }
 
     // ── 3. Insert payment record (ignore duplicate) ────────
-    await supabase.from("payments").upsert(
+    const { error: paymentError } = await supabase.from("payments").upsert(
       {
         user_id,
         amount: amount || 0,
         plan: planName,
-        credits_added: credits_to_add || 0,
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,
@@ -146,6 +152,11 @@ export default async function handler(req, res) {
       },
       { onConflict: "razorpay_order_id" }
     );
+
+    if (paymentError) {
+      console.error("[verify-payment] Payment upsert error:", paymentError);
+      return res.status(500).json({ error: "Failed to save payment record" });
+    }
 
     console.log("[verify-payment] Success:", {
       user_id,

@@ -33,6 +33,22 @@ function isDuplicateError(error) {
   return error?.code === "23505";
 }
 
+async function syncProfileAccess(supabase, userId, planName, endDate) {
+  const { error } = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        plan: planName,
+        unlimited_until: endDate,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
+
+  return error;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -174,7 +190,6 @@ export default async function handler(req, res) {
         amount,
         plan: planName,
         currency: payment.currency || "INR",
-        credits_added: 0,
         razorpay_order_id: orderId,
         razorpay_payment_id: paymentId,
         status: "success",
@@ -233,7 +248,7 @@ export default async function handler(req, res) {
       const { error: subscriptionUpdateError } = await supabase
         .from("subscriptions")
         .update({
-          plan: planName,
+          plan_name: planName,
           status: "active",
           start_date: startDate,
           end_date: endDate,
@@ -253,7 +268,7 @@ export default async function handler(req, res) {
         .from("subscriptions")
         .insert({
           user_id: userId,
-          plan: planName,
+          plan_name: planName,
           status: "active",
           start_date: startDate,
           end_date: endDate,
@@ -272,13 +287,16 @@ export default async function handler(req, res) {
   }
 
   // ── Update user's plan in profiles table ──────────────────
-  const { error: profileUpdateError } = await supabase
-    .from("profiles")
-    .update({ plan: planName, updated_at: new Date().toISOString() })
-    .eq("id", userId);
+  const profileUpdateError = await syncProfileAccess(
+    supabase,
+    userId,
+    planName,
+    endDate
+  );
 
   if (profileUpdateError) {
     console.error("[razorpay-webhook] Profile update failed:", profileUpdateError);
+    return res.status(500).json({ error: "Failed to activate user profile" });
   }
 
   console.log("[razorpay-webhook] payment.captured processed", {

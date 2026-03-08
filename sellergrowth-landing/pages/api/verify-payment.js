@@ -28,7 +28,6 @@ export default async function handler(req, res) {
     duration_days,
     amount,
     phone,
-    credits_to_add,
   } = req.body || {};
 
   // Normalise plan name
@@ -45,7 +44,6 @@ export default async function handler(req, res) {
       duration_days,
       amount,
       phone,
-      credits_to_add,
     })
   );
 
@@ -94,77 +92,6 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    // ── Determine payment type: subscription vs credit pack ──
-    const isCreditPack = credits_to_add && parseInt(credits_to_add) > 0 && !duration_days;
-
-    if (isCreditPack) {
-      // ════════════════════════════════════════
-      //  CREDIT PACK PURCHASE
-      // ════════════════════════════════════════
-      const creditsToAdd = parseInt(credits_to_add);
-
-      // Get current user profile
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("credits")
-        .eq("id", user_id)
-        .single();
-
-      if (profileErr || !profile) {
-        console.error("[verify-payment] User not found:", profileErr);
-        return res.status(400).json({ error: "User not found" });
-      }
-
-      const newBalance = (profile.credits || 0) + creditsToAdd;
-
-      // Update credits in profiles
-      const { error: updateErr } = await supabase
-        .from("profiles")
-        .update({ credits: newBalance })
-        .eq("id", user_id);
-
-      if (updateErr) {
-        console.error("[verify-payment] Credit update error:", updateErr);
-        return res.status(500).json({ error: "Failed to update credits" });
-      }
-
-      // Log payment record
-      await supabase.from("payments").upsert(
-        {
-          user_id,
-          amount: amount || 0,
-          plan: planName,
-          credits_added: creditsToAdd,
-          razorpay_order_id,
-          razorpay_payment_id,
-          razorpay_signature,
-          status: "captured",
-        },
-        { onConflict: "razorpay_order_id" }
-      );
-
-      // Log credit transaction
-      await supabase.from("credit_transactions").insert({
-        user_id,
-        delta: creditsToAdd,
-        reason: "topup",
-        meta: { razorpay_payment_id, plan: planName },
-      });
-
-      console.log("[verify-payment] Credit pack success:", {
-        user_id,
-        credits_added: creditsToAdd,
-        new_balance: newBalance,
-      });
-
-      return res.status(200).json({
-        success: true,
-        subscription: false,
-        credits_added: creditsToAdd,
-        new_balance: newBalance,
-      });
-    }
-
     // ════════════════════════════════════════
     //  SUBSCRIPTION PURCHASE
     // ════════════════════════════════════════
@@ -180,7 +107,7 @@ export default async function handler(req, res) {
       .upsert(
         {
           user_id,
-          plan: planName,
+          plan_name: planName,
           status: "active",
           start_date: startDate.toISOString(),
           end_date: endDate.toISOString(),
@@ -197,13 +124,27 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to save subscription" });
     }
 
-    // 2. Insert payment record
-    await supabase.from("payments").upsert(
+    // 2. Upsert user plan/access in profiles
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .upsert({
+        id: user_id,
+        plan: planName,
+        unlimited_until: endDate.toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+
+    if (profileError) {
+      console.error("[verify-payment] Profile upsert error:", profileError);
+      return res.status(500).json({ error: "Failed to activate user profile" });
+    }
+
+    // 3. Insert payment record
+    const { error: paymentError } = await supabase.from("payments").upsert(
       {
         user_id,
         amount: amount || 0,
         plan: planName,
-        credits_added: 0,
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,
@@ -211,6 +152,11 @@ export default async function handler(req, res) {
       },
       { onConflict: "razorpay_order_id" }
     );
+
+    if (paymentError) {
+      console.error("[verify-payment] Payment upsert error:", paymentError);
+      return res.status(500).json({ error: "Failed to save payment record" });
+    }
 
     console.log("[verify-payment] Subscription success:", {
       user_id,

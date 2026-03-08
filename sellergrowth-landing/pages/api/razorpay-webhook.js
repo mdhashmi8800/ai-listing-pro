@@ -33,6 +33,22 @@ function isDuplicateError(error) {
   return error?.code === "23505";
 }
 
+async function syncProfileAccess(supabase, userId, planName, endDate) {
+  const { error } = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        plan: planName,
+        unlimited_until: endDate,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
+
+  return error;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -104,7 +120,6 @@ export default async function handler(req, res) {
   let userId = payment?.notes?.user_id;
   let requestedPlan = payment?.notes?.plan || payment?.notes?.plan_id;
   let durationFromNotes = payment?.notes?.duration_days;
-  let creditsToAddFromNotes = payment?.notes?.credits_to_add;
 
   if (!userId && orderId) {
     try {
@@ -118,9 +133,6 @@ export default async function handler(req, res) {
       userId = order?.notes?.user_id || userId;
       requestedPlan = requestedPlan || order?.notes?.plan || order?.notes?.plan_id;
       durationFromNotes = durationFromNotes || order?.notes?.duration_days;
-      if (!creditsToAddFromNotes) {
-        creditsToAddFromNotes = order?.notes?.credits_to_add;
-      }
     } catch (fetchErr) {
       console.error("[razorpay-webhook] Failed to fetch order:", fetchErr);
     }
@@ -158,10 +170,6 @@ export default async function handler(req, res) {
   const now = new Date();
   const startDate = now.toISOString();
 
-  // ── Determine if this is a credit pack purchase ───────────
-  const isCreditPack = creditsToAddFromNotes && parseInt(creditsToAddFromNotes) > 0;
-  const creditsToAdd = isCreditPack ? parseInt(creditsToAddFromNotes) : 0;
-
   // ── Check for duplicate payment ───────────────────────────
   const { data: existingPayment, error: existingPaymentError } = await supabase
     .from("payments")
@@ -182,7 +190,6 @@ export default async function handler(req, res) {
         amount,
         plan: planName,
         currency: payment.currency || "INR",
-        credits_added: creditsToAdd,
         razorpay_order_id: orderId,
         razorpay_payment_id: paymentId,
         status: "success",
@@ -203,56 +210,6 @@ export default async function handler(req, res) {
     }
   } else {
     console.log("[razorpay-webhook] Payment already exists:", existingPayment);
-  }
-
-  if (isCreditPack) {
-    // ════════════════════════════════════════
-    //  CREDIT PACK PURCHASE — add credits, no subscription
-    // ════════════════════════════════════════
-    console.log("[razorpay-webhook] Processing as CREDIT PACK:", { creditsToAdd, planName });
-
-    // Get current user profile credits
-    const { data: profile, error: profileFetchErr } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", userId)
-      .single();
-
-    if (profileFetchErr || !profile) {
-      console.error("[razorpay-webhook] User not found:", profileFetchErr);
-      return res.status(400).json({ error: "User not found" });
-    }
-
-    const newBalance = (profile.credits || 0) + creditsToAdd;
-
-    // Update credits in profiles
-    const { error: creditUpdateErr } = await supabase
-      .from("profiles")
-      .update({ credits: newBalance, updated_at: new Date().toISOString() })
-      .eq("id", userId);
-
-    if (creditUpdateErr) {
-      console.error("[razorpay-webhook] Credit update error:", creditUpdateErr);
-      return res.status(500).json({ error: "Failed to update credits" });
-    }
-
-    // Log credit transaction
-    await supabase.from("credit_transactions").insert({
-      user_id: userId,
-      delta: creditsToAdd,
-      reason: "topup",
-      meta: { razorpay_payment_id: paymentId, plan: planName },
-    });
-
-    console.log("[razorpay-webhook] Credit pack processed:", {
-      paymentId,
-      userId,
-      planName,
-      creditsToAdd,
-      newBalance,
-    });
-
-    return res.status(200).json({ status: "ok", credits_added: creditsToAdd });
   }
 
   // ════════════════════════════════════════
@@ -297,7 +254,7 @@ export default async function handler(req, res) {
       const { error: subscriptionUpdateError } = await supabase
         .from("subscriptions")
         .update({
-          plan: planName,
+          plan_name: planName,
           status: "active",
           start_date: startDate,
           end_date: endDate,
@@ -317,7 +274,7 @@ export default async function handler(req, res) {
         .from("subscriptions")
         .insert({
           user_id: userId,
-          plan: planName,
+          plan_name: planName,
           status: "active",
           start_date: startDate,
           end_date: endDate,
@@ -336,13 +293,16 @@ export default async function handler(req, res) {
   }
 
   // ── Update user's plan in profiles table ──────────────────
-  const { error: profileUpdateError } = await supabase
-    .from("profiles")
-    .update({ plan: planName, updated_at: new Date().toISOString() })
-    .eq("id", userId);
+  const profileUpdateError = await syncProfileAccess(
+    supabase,
+    userId,
+    planName,
+    endDate
+  );
 
   if (profileUpdateError) {
     console.error("[razorpay-webhook] Profile update failed:", profileUpdateError);
+    return res.status(500).json({ error: "Failed to activate user profile" });
   }
 
   console.log("[razorpay-webhook] payment.captured processed", {

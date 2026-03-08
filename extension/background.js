@@ -81,6 +81,59 @@ async function supabaseExchangeCodeForSession(code, verifier) {
     }
 }
 
+function isFutureIsoTimestamp(value) {
+    if (!value) return false;
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime()) && parsed > new Date();
+}
+
+async function fetchJsonWithAuth(url, accessToken) {
+    const response = await fetch(url, {
+        headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken}`
+        }
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`${response.status}:${errorText}`);
+    }
+
+    return response.json();
+}
+
+async function fetchActiveSubscription(accessToken, userId) {
+    const subscriptionUrl = `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active&select=plan_name,plan,end_date&order=end_date.desc&limit=1`;
+    const rows = await fetchJsonWithAuth(subscriptionUrl, accessToken);
+    const subscription = Array.isArray(rows) ? rows[0] : null;
+
+    if (subscription?.end_date && isFutureIsoTimestamp(subscription.end_date)) {
+        return subscription;
+    }
+
+    return null;
+}
+
+async function syncProfileSubscription(accessToken, userId, subscription) {
+    if (!subscription?.end_date) return;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${accessToken}`,
+            Prefer: 'return=minimal'
+        },
+        body: JSON.stringify({
+            plan: subscription.plan_name || subscription.plan || 'trial',
+            unlimited_until: subscription.end_date,
+            updated_at: new Date().toISOString()
+        })
+    }).catch(() => null);
+}
+
 // ── BackgroundService Class ───────────────────────────────────
 class BackgroundService {
     constructor() {
@@ -281,15 +334,13 @@ class BackgroundService {
                     return true;
                 }
 
-                // ── Get / refresh credits (live from profiles table) ──
+                // ── Check subscription status ──
                 case 'REFRESH_CREDITS':
                 case 'GET_CREDITS': {
                     (async () => {
                         try {
-                            // Ensure any pending session restore completes first
                             await this.restoreSessionPromise;
 
-                            // 1. Get the stored session to obtain access_token
                             const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
                             const session = sessionStore[SUPABASE_SESSION_KEY];
                             if (!session?.access_token) {
@@ -298,7 +349,6 @@ class BackgroundService {
                                 return;
                             }
 
-                            // 2. Identify the current user via Supabase auth
                             const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
                                 headers: {
                                     apikey: SUPABASE_ANON_KEY,
@@ -306,18 +356,13 @@ class BackgroundService {
                                 }
                             });
                             if (!userRes.ok) {
-                                const authErrText = await userRes.text().catch(() => '');
-                                console.error('[GET_CREDITS] Auth failed:', userRes.status, authErrText);
                                 sendResponse({ success: false, allowed: false, credits: 0, error: `Auth failed (${userRes.status})` });
                                 return;
                             }
                             const authUser = await userRes.json();
-                            console.log('[GET_CREDITS] authUser.id:', authUser.id);
 
-                            // 3. Fetch live credits from profiles table
-                            const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=credits`;
-                            console.log('[GET_CREDITS] Fetching:', profileUrl);
-
+                            // Check subscription status from profiles
+                            const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${authUser.id}&select=unlimited_until`;
                             const profileRes = await fetch(profileUrl, {
                                 headers: {
                                     apikey: SUPABASE_ANON_KEY,
@@ -326,35 +371,51 @@ class BackgroundService {
                             });
 
                             if (!profileRes.ok) {
-                                const profileErrText = await profileRes.text().catch(() => '');
-                                console.error('[GET_CREDITS] Profile fetch failed:', profileRes.status, profileErrText);
                                 sendResponse({ success: false, allowed: false, credits: 0, error: `Profile fetch failed (${profileRes.status})` });
                                 return;
                             }
 
                             const profiles = await profileRes.json();
-                            console.log('[GET_CREDITS] Raw profiles response:', JSON.stringify(profiles));
-
-                            // 4. Handle empty array (RLS policy may be blocking access)
                             if (!Array.isArray(profiles) || profiles.length === 0) {
-                                console.warn('[GET_CREDITS] Empty profiles array — RLS may be blocking access for user:', authUser.id);
+                                const activeSubscription = await fetchActiveSubscription(session.access_token, authUser.id).catch(() => null);
+                                if (!activeSubscription) {
+                                    sendResponse({ success: false, allowed: false, credits: 0, error: 'Profile not found' });
+                                    return;
+                                }
+
                                 sendResponse({
-                                    success: false,
-                                    allowed: false,
-                                    credits: 0,
-                                    error: 'Profile not found — check RLS policies on profiles table'
+                                    success: true,
+                                    allowed: true,
+                                    credits: 999,
+                                    hasSubscription: true,
+                                    plan: activeSubscription.plan_name || activeSubscription.plan || 'trial',
+                                    unlimitedUntil: activeSubscription.end_date
                                 });
                                 return;
                             }
 
-                            // 5. Parse credits
-                            const credits = profiles[0].credits ?? 0;
+                            const unlimitedUntil = profiles[0].unlimited_until;
+                            let hasSubscription = isFutureIsoTimestamp(unlimitedUntil);
+                            let effectiveUnlimitedUntil = unlimitedUntil || null;
+                            let effectivePlan = profiles[0].plan || 'free';
 
-                            console.log('[GET_CREDITS] credits:', credits, '| allowed:', credits > 0);
+                            if (!hasSubscription) {
+                                const activeSubscription = await fetchActiveSubscription(session.access_token, authUser.id).catch(() => null);
+                                if (activeSubscription) {
+                                    hasSubscription = true;
+                                    effectiveUnlimitedUntil = activeSubscription.end_date;
+                                    effectivePlan = activeSubscription.plan_name || activeSubscription.plan || effectivePlan;
+                                    await syncProfileSubscription(session.access_token, authUser.id, activeSubscription);
+                                }
+                            }
+
                             sendResponse({
                                 success: true,
-                                allowed: credits > 0,
-                                credits: credits
+                                allowed: hasSubscription,
+                                credits: hasSubscription ? 999 : 0,
+                                hasSubscription: hasSubscription,
+                                plan: effectivePlan,
+                                unlimitedUntil: effectiveUnlimitedUntil
                             });
                         } catch (error) {
                             console.error('[GET_CREDITS] Unexpected error:', error);
@@ -364,90 +425,15 @@ class BackgroundService {
                     return true;
                 }
 
-                // ── Deduct credits via Supabase RPC ──
+                // ── Deduct credits (no-op, subscription model) ──
                 case 'DEDUCT_CREDITS': {
-                    const deductAmount = payload.amount || message.amount || 1;
-                    (async () => {
-                        try {
-                            await this.restoreSessionPromise;
-
-                            const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
-                            const session = sessionStore[SUPABASE_SESSION_KEY];
-                            if (!session?.access_token) {
-                                sendResponse({ success: false, remaining: 0, error: 'No session' });
-                                return;
-                            }
-
-                            // Call the deduct_credit RPC (handles balance check + deduction atomically)
-                            const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deduct_credit`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    apikey: SUPABASE_ANON_KEY,
-                                    Authorization: `Bearer ${session.access_token}`
-                                },
-                                body: JSON.stringify({ amount: deductAmount })
-                            });
-
-                            if (!rpcRes.ok) {
-                                const errBody = await rpcRes.json().catch(() => ({}));
-                                const errMsg = errBody?.message || errBody?.error || 'Deduct RPC failed';
-                                sendResponse({ success: false, remaining: 0, error: errMsg });
-                                return;
-                            }
-
-                            const remaining = await rpcRes.json();
-
-                            console.log('[DEDUCT_CREDITS] Deducted', deductAmount, '→ remaining:', remaining);
-                            sendResponse({ success: true, remaining });
-                        } catch (error) {
-                            console.error('DEDUCT_CREDITS error:', error);
-                            sendResponse({ success: false, remaining: 0, error: error.message });
-                        }
-                    })();
+                    sendResponse({ success: true, remaining: 999 });
                     return true;
                 }
 
-                // ── Run AI Shipping Optimizer (deduct 1 credit) ──
+                // ── Run AI Shipping Optimizer (subscription model, no credit deduction) ──
                 case 'RUN_OPTIMIZER': {
-                    (async () => {
-                        try {
-                            await this.restoreSessionPromise;
-
-                            const sessionStore = await chrome.storage.local.get([SUPABASE_SESSION_KEY]);
-                            const session = sessionStore[SUPABASE_SESSION_KEY];
-                            if (!session?.access_token) {
-                                sendResponse({ success: false, error: 'No session — please login' });
-                                return;
-                            }
-
-                            // Deduct 1 credit via the existing deduct_credit RPC
-                            const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/deduct_credit`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    apikey: SUPABASE_ANON_KEY,
-                                    Authorization: `Bearer ${session.access_token}`
-                                },
-                                body: JSON.stringify({ amount: 1 })
-                            });
-
-                            if (!rpcRes.ok) {
-                                const errBody = await rpcRes.json().catch(() => ({}));
-                                const errMsg = errBody?.message || errBody?.error || 'Credit deduction failed';
-                                console.error('[RUN_OPTIMIZER] Deduction failed:', errMsg);
-                                sendResponse({ success: false, error: errMsg });
-                                return;
-                            }
-
-                            const remaining = await rpcRes.json();
-                            console.log('[RUN_OPTIMIZER] 1 credit deducted → remaining:', remaining);
-                            sendResponse({ success: true, remaining });
-                        } catch (error) {
-                            console.error('[RUN_OPTIMIZER] Error:', error);
-                            sendResponse({ success: false, error: error.message });
-                        }
-                    })();
+                    sendResponse({ success: true, remaining: 999 });
                     return true;
                 }
 
