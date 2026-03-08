@@ -109,7 +109,7 @@ export default async function handler(req, res) {
       .upsert(
         {
           user_id,
-          plan_name: planName,
+          plan: planName,
           status: "active",
           start_date: startDate.toISOString(),
           end_date: endDate.toISOString(),
@@ -137,6 +137,7 @@ export default async function handler(req, res) {
       {
         user_id,
         amount: amount || 0,
+        plan: planName,
         credits_added: credits_to_add || 0,
         razorpay_order_id,
         razorpay_payment_id,

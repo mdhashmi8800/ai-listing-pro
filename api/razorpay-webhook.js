@@ -86,13 +86,11 @@ export default async function handler(req, res) {
   }
 
   const payment = event?.payload?.payment?.entity;
-  const notes = payment?.notes || {};
 
   console.log("[razorpay-webhook] webhook received");
   console.log("[razorpay-webhook] event type:", event?.event || null);
   console.log("[razorpay-webhook] payment.id:", payment?.id || null);
-  console.log("[razorpay-webhook] notes.user_id:", notes.user_id || null);
-  console.log("[razorpay-webhook] notes.plan:", notes.plan || null);
+  console.log("[razorpay-webhook] payment.notes:", JSON.stringify(payment?.notes || {}));
 
   if (event?.event !== "payment.captured") {
     return res.status(200).json({ status: "ok", ignored: true });
@@ -101,20 +99,36 @@ export default async function handler(req, res) {
   const paymentId = payment?.id;
   const orderId = payment?.order_id;
   const amount = Number(payment?.amount || 0) / 100;
-  const userId = notes.user_id;
-  const requestedPlan = notes.plan || notes.plan_id;
-  const planDetails = getPlanDetails(requestedPlan);
-  const planName = planDetails?.planName || String(requestedPlan || "").trim();
-  const durationDays = planDetails?.durationDays || 30;
+
+  // Try payment.notes first, fallback to order.notes
+  let userId = payment?.notes?.user_id;
+  let requestedPlan = payment?.notes?.plan || payment?.notes?.plan_id;
+  let durationFromNotes = payment?.notes?.duration_days;
+
+  if (!userId && orderId) {
+    try {
+      const Razorpay = (await import("razorpay")).default;
+      const razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+      });
+      const order = await razorpay.orders.fetch(orderId);
+      console.log("[razorpay-webhook] Fetched order.notes:", JSON.stringify(order?.notes || {}));
+      userId = order?.notes?.user_id || userId;
+      requestedPlan = requestedPlan || order?.notes?.plan || order?.notes?.plan_id;
+      durationFromNotes = durationFromNotes || order?.notes?.duration_days;
+    } catch (fetchErr) {
+      console.error("[razorpay-webhook] Failed to fetch order:", fetchErr);
+    }
+  }
 
   if (!userId) {
-    console.error("[razorpay-webhook] Missing notes.user_id", {
-      paymentId,
-      orderId,
-      requestedPlan,
-    });
-    return res.status(400).json({ error: "Missing notes.user_id" });
+    console.error("[razorpay-webhook] Missing user_id in payment and order notes", { paymentId, orderId });
+    return res.status(400).json({ error: "Missing user_id" });
   }
+  const planDetails = getPlanDetails(requestedPlan);
+  const planName = planDetails?.planName || String(requestedPlan || "").trim();
+  const durationDays = durationFromNotes ? Number(durationFromNotes) : (planDetails?.durationDays || 30);
 
   if (!paymentId || !orderId || !amount || !planName) {
     console.error("[razorpay-webhook] Missing required payment fields", {
@@ -158,6 +172,7 @@ export default async function handler(req, res) {
       .insert({
         user_id: userId,
         amount,
+        plan: planName,
         currency: payment.currency || "INR",
         credits_added: 0,
         razorpay_order_id: orderId,
@@ -218,7 +233,7 @@ export default async function handler(req, res) {
       const { error: subscriptionUpdateError } = await supabase
         .from("subscriptions")
         .update({
-          plan_name: planName,
+          plan: planName,
           status: "active",
           start_date: startDate,
           end_date: endDate,
@@ -238,7 +253,7 @@ export default async function handler(req, res) {
         .from("subscriptions")
         .insert({
           user_id: userId,
-          plan_name: planName,
+          plan: planName,
           status: "active",
           start_date: startDate,
           end_date: endDate,
