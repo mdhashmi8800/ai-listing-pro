@@ -129,9 +129,6 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(verifyBody)
                     });
-                            phone: phone
-                        })
-                    });
                     const result = await verifyRes.json();
                     if (result.success) {
                         if (statusEl) statusEl.textContent = 'Payment verified! Redirecting...';

@@ -104,6 +104,7 @@ export default async function handler(req, res) {
   let userId = payment?.notes?.user_id;
   let requestedPlan = payment?.notes?.plan || payment?.notes?.plan_id;
   let durationFromNotes = payment?.notes?.duration_days;
+  let creditsToAddFromNotes = payment?.notes?.credits_to_add;
 
   if (!userId && orderId) {
     try {
@@ -117,6 +118,9 @@ export default async function handler(req, res) {
       userId = order?.notes?.user_id || userId;
       requestedPlan = requestedPlan || order?.notes?.plan || order?.notes?.plan_id;
       durationFromNotes = durationFromNotes || order?.notes?.duration_days;
+      if (!creditsToAddFromNotes) {
+        creditsToAddFromNotes = order?.notes?.credits_to_add;
+      }
     } catch (fetchErr) {
       console.error("[razorpay-webhook] Failed to fetch order:", fetchErr);
     }
@@ -129,7 +133,6 @@ export default async function handler(req, res) {
 
   const planDetails = getPlanDetails(requestedPlan);
   const planName = planDetails?.planName || String(requestedPlan || "").trim();
-  const durationDays = durationFromNotes ? Number(durationFromNotes) : (planDetails?.durationDays || 30);
 
   if (!paymentId || !orderId || !amount || !planName) {
     console.error("[razorpay-webhook] Missing required payment fields", {
@@ -154,8 +157,12 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
   const now = new Date();
   const startDate = now.toISOString();
-  const endDate = addDays(now, durationDays).toISOString();
 
+  // ── Determine if this is a credit pack purchase ───────────
+  const isCreditPack = creditsToAddFromNotes && parseInt(creditsToAddFromNotes) > 0;
+  const creditsToAdd = isCreditPack ? parseInt(creditsToAddFromNotes) : 0;
+
+  // ── Check for duplicate payment ───────────────────────────
   const { data: existingPayment, error: existingPaymentError } = await supabase
     .from("payments")
     .select("id")
@@ -175,7 +182,7 @@ export default async function handler(req, res) {
         amount,
         plan: planName,
         currency: payment.currency || "INR",
-        credits_added: 0,
+        credits_added: creditsToAdd,
         razorpay_order_id: orderId,
         razorpay_payment_id: paymentId,
         status: "success",
@@ -197,6 +204,62 @@ export default async function handler(req, res) {
   } else {
     console.log("[razorpay-webhook] Payment already exists:", existingPayment);
   }
+
+  if (isCreditPack) {
+    // ════════════════════════════════════════
+    //  CREDIT PACK PURCHASE — add credits, no subscription
+    // ════════════════════════════════════════
+    console.log("[razorpay-webhook] Processing as CREDIT PACK:", { creditsToAdd, planName });
+
+    // Get current user profile credits
+    const { data: profile, error: profileFetchErr } = await supabase
+      .from("profiles")
+      .select("credits")
+      .eq("id", userId)
+      .single();
+
+    if (profileFetchErr || !profile) {
+      console.error("[razorpay-webhook] User not found:", profileFetchErr);
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    const newBalance = (profile.credits || 0) + creditsToAdd;
+
+    // Update credits in profiles
+    const { error: creditUpdateErr } = await supabase
+      .from("profiles")
+      .update({ credits: newBalance, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+
+    if (creditUpdateErr) {
+      console.error("[razorpay-webhook] Credit update error:", creditUpdateErr);
+      return res.status(500).json({ error: "Failed to update credits" });
+    }
+
+    // Log credit transaction
+    await supabase.from("credit_transactions").insert({
+      user_id: userId,
+      delta: creditsToAdd,
+      reason: "topup",
+      meta: { razorpay_payment_id: paymentId, plan: planName },
+    });
+
+    console.log("[razorpay-webhook] Credit pack processed:", {
+      paymentId,
+      userId,
+      planName,
+      creditsToAdd,
+      newBalance,
+    });
+
+    return res.status(200).json({ status: "ok", credits_added: creditsToAdd });
+  }
+
+  // ════════════════════════════════════════
+  //  SUBSCRIPTION PURCHASE
+  // ════════════════════════════════════════
+  const durationDays = durationFromNotes ? Number(durationFromNotes) : (planDetails?.durationDays || 30);
+  const endDate = addDays(now, durationDays).toISOString();
 
   const { data: existingSubscription, error: existingSubscriptionError } = await supabase
     .from("subscriptions")

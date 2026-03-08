@@ -712,12 +712,22 @@ document.addEventListener('DOMContentLoaded', async () => {
           appContainer.classList.remove('hidden');
 
           if (verified) {
-            showMessage('Payment verified! Subscription activated.', 'success');
-            // Refresh UI to show PRO state
+            if (ctx.isCreditPack) {
+              showMessage('Payment verified! Credits added.', 'success');
+            } else {
+              showMessage('Payment verified! Subscription activated.', 'success');
+            }
+            // Refresh UI to show updated state
             setTimeout(() => checkLoginStatus(), 1000);
           } else {
-            // Fallback: poll for subscription in case webhook or checkout.html handled it
-            pollSubscriptionAfterPayment(ctx.user, ctx.token);
+            if (ctx.isCreditPack) {
+              // For credit packs, just refresh UI — webhook will handle it
+              showMessage('Payment successful! Credits will update shortly.', 'success');
+              setTimeout(() => checkLoginStatus(), 3000);
+            } else {
+              // Fallback: poll for subscription in case webhook or checkout.html handled it
+              pollSubscriptionAfterPayment(ctx.user, ctx.token);
+            }
           }
         } else {
           dashboardIframe.src = '';
