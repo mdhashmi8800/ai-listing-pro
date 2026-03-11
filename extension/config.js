@@ -5,9 +5,9 @@
 
 // ================= PAYMENT CONFIG =================
 
-// Supabase Edge Function - Create Razorpay Order
+// Vercel Serverless Function - Create Razorpay Order
 const CREATE_ORDER_URL =
-    "https://zxborvqzttyofyrksznw.supabase.co/functions/v1/create-order";
+    "https://meesho-ai-tool.vercel.app/api/create-order";
 
 // Vercel Serverless Function - Verify Payment
 const VERIFY_PAYMENT_URL =
@@ -18,6 +18,9 @@ const CHECKOUT_URL = "https://meesho-ai-tool.vercel.app/checkout.html";
 
 // Vision AI - Analyze product image
 const ANALYZE_IMAGE_URL = "https://meesho-ai-tool.vercel.app/api/analyze-image";
+
+// AI Listing Optimizer
+const OPTIMIZE_URL = "https://meesho-ai-tool.vercel.app/api/optimize";
 
 
 const CONFIG = {
@@ -32,12 +35,12 @@ const CONFIG = {
     // ── Backend API ────────────────────────────────────────────
     API_URL: 'https://meesho-credits-api.vercel.app',
 
-    // ── Credits ────────────────────────────────────────────────
-    DEFAULT_SIGNUP_CREDITS: 15,          // Free credits every new user gets on signup
-    CREDITS_PER_OPTIMIZATION: 1,         // Credits per AI Optimizer run
-    CREDIT_COST_AI_RUN: 1,              // Credits per AI Optimizer run (alias)
-    CREDIT_COST_SHIPPING: 0,            // Shipping check is always free
-    LOW_CREDITS_THRESHOLD: 5,           // Warning when credits <= this
+    // ── Credits (legacy, kept for DB compatibility) ──────────
+    DEFAULT_SIGNUP_CREDITS: 0,
+    CREDITS_PER_OPTIMIZATION: 1,
+    CREDIT_COST_AI_RUN: 1,
+    CREDIT_COST_SHIPPING: 0,
+    LOW_CREDITS_THRESHOLD: 0,
 
     // ── Abuse Protection ────────────────────────────────────────
     MAX_RUNS_PER_HOUR: 50,              // Max optimization runs per hour per user
@@ -50,35 +53,6 @@ const CONFIG = {
         pro: { label: 'Pro Monthly', color: '#10b981' },
     },
 
-    // ── Credit Packs (for users who don't want subscriptions) ───
-    CREDIT_PACKS: {
-        STARTER: {
-            id: 'credit_starter',
-            name: 'Starter Pack',
-            price: 79,
-            credits: 50,
-            badge: null,
-            tagline: 'Great for beginners',
-            features: [
-                '50 Credits',
-                'One-time payment',
-                'No expiry',
-            ],
-        },
-        GROWTH: {
-            id: 'credit_growth',
-            name: 'Growth Pack',
-            price: 149,
-            credits: 200,
-            badge: 'Best Value',
-            tagline: 'Best value per credit',
-            features: [
-                '200 Credits',
-                'One-time payment',
-                'No expiry',
-            ],
-        },
-    },
 
     // ── Subscription Plans (shown in pricing section) ──────────
     SUBSCRIPTION_PLANS: {
@@ -127,6 +101,7 @@ const CONFIG = {
     VERIFY_PAYMENT_URL: VERIFY_PAYMENT_URL,
     CHECKOUT_URL: CHECKOUT_URL,
     ANALYZE_IMAGE_URL: ANALYZE_IMAGE_URL,
+    OPTIMIZE_URL: OPTIMIZE_URL,
 
     // ── WhatsApp Support ───────────────────────────────────────
     OWNER_NAME: 'Hashmi Akbar',

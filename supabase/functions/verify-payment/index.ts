@@ -37,7 +37,6 @@ Deno.serve(async (req) => {
             razorpay_signature,
             user_id,
             plan_type,
-            credits_to_add,
             amount,
             duration_days,
             phone
@@ -60,7 +59,7 @@ Deno.serve(async (req) => {
         // 3. Get User from profiles table
         const { data: user, error: userError } = await supabase
             .from('profiles')
-            .select('credits, first_purchase')
+            .select('id')
             .eq('id', user_id)
             .single()
 
@@ -95,14 +94,18 @@ Deno.serve(async (req) => {
             // Update user plan
             await supabase
                 .from('profiles')
-                .update({ plan: plan_type || 'trial', updated_at: new Date().toISOString() })
+                .update({
+                    plan: plan_type || 'trial',
+                    unlimited_until: endDate.toISOString(),
+                    updated_at: new Date().toISOString()
+                })
                 .eq('id', user_id)
 
             // Log payment
             await supabase.from('payments').insert({
                 user_id,
                 amount: amount || 0,
-                credits_added: 0,
+                plan: plan_type || 'trial',
                 razorpay_order_id,
                 razorpay_payment_id,
                 razorpay_signature,
@@ -123,69 +126,10 @@ Deno.serve(async (req) => {
             )
         }
 
-        // 5. Handle credit-based plans (credits_to_add present)
-        let finalCreditsToAdd = parseInt(credits_to_add, 10)
-        if (!Number.isFinite(finalCreditsToAdd) || finalCreditsToAdd <= 0) {
-            return new Response(JSON.stringify({ error: 'Invalid credits_to_add' }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400
-            })
-        }
-        let isFirstPurchase = user.first_purchase
-
-        // Apply Starter bonus (50 + 25 if first purchase)
-        if (plan_type === 'starter' && isFirstPurchase) {
-            finalCreditsToAdd += 25
-        }
-
-        // 6. Update credits in profiles table
-        const { error: updateError } = await supabase
-            .from('profiles')
-            .update({
-                credits: user.credits + finalCreditsToAdd,
-                first_purchase: false,
-                plan: plan_type
-            })
-            .eq('id', user_id)
-
-        if (updateError) throw updateError
-
-        // Log payment
-        const { error: paymentError } = await supabase
-            .from('payments')
-            .insert({
-                user_id,
-                amount: amount || 0,
-                credits_added: finalCreditsToAdd,
-                razorpay_order_id,
-                razorpay_payment_id,
-                razorpay_signature,
-                status: 'captured'
-            })
-
-        if (paymentError) {
-            console.error('Payment log error:', paymentError)
-        }
-
-        // Log transaction
-        await supabase.from('credit_transactions').insert({
-            user_id,
-            delta: finalCreditsToAdd,
-            reason: 'topup',
-            meta: { razorpay_payment_id, plan_type }
+        return new Response(JSON.stringify({ error: 'duration_days is required for subscription activation' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400
         })
-
-        return new Response(
-            JSON.stringify({
-                success: true,
-                credits_added: finalCreditsToAdd,
-                new_balance: user.credits + finalCreditsToAdd
-            }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200
-            }
-        )
 
     } catch (error) {
         console.error('Verify Error:', error)

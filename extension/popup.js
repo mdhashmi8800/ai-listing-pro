@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function createUserInDatabase(user, accessToken) {
     try {
       const checkResponse = await bgFetch(
-        `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=credits`,
+        `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=id`,
         {
           headers: {
             'apikey': CONFIG.SUPABASE_ANON_KEY,
@@ -222,8 +222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const userData = {
           id: user.id,
           email: user.email,
-          name: user.name,
-          credits: CONFIG.DEFAULT_SIGNUP_CREDITS
+          name: user.name
         };
         const createResponse = await bgFetch(`${CONFIG.SUPABASE_URL}/rest/v1/profiles`, {
           method: 'POST',
@@ -237,11 +236,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         if (createResponse.ok) {
-          user.credits = CONFIG.DEFAULT_SIGNUP_CREDITS;
           await chrome.storage.local.set({ user });
         }
       } else {
-        user.credits = existingUsers[0].credits;
         await chrome.storage.local.set({ user });
       }
     } catch (e) {
@@ -332,20 +329,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             headerBadge.style.color = '#10b981';
             headerBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
           } else {
-            // STATE 4: Not Subscribed — show credits + upgrade option
+            // STATE 4: Not subscribed — show subscription pricing
             showPricingState(user);
-            const credits = user.credits || 0;
-            if (credits > 0) {
-              headerBadge.textContent = `${credits} CR`;
-              headerBadge.style.background = 'rgba(124, 58, 237, 0.15)';
-              headerBadge.style.color = '#a78bfa';
-              headerBadge.style.borderColor = 'rgba(124, 58, 237, 0.3)';
-            } else {
-              headerBadge.textContent = 'FREE';
-              headerBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-              headerBadge.style.color = '#f59e0b';
-              headerBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
-            }
+            headerBadge.textContent = 'FREE';
+            headerBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+            headerBadge.style.color = '#f59e0b';
+            headerBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
           }
           return;
         }
@@ -396,7 +385,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const remaining = document.getElementById('sub-remaining');
 
     if (subscription) {
-      planName.textContent = subscription.plan_name || 'Active';
+      planName.textContent = subscription.plan_name || subscription.plan || 'Active';
       planName.className = 'sub-value active';
 
       expiry.textContent = formatDate(subscription.end_date);
@@ -454,19 +443,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         amount: plan.price
       });
 
-      const isCreditPack = Boolean(plan.credits);
-
       const orderBody = {
         amount: plan.price,
         plan_id: plan.id,
         user_id: stored.user.id,
         phone: phone,
+        duration_days: plan.duration_days,
       };
-      if (isCreditPack) {
-        orderBody.credits_to_add = plan.credits;
-      } else {
-        orderBody.duration_days = plan.duration_days;
-      }
 
       const res = await bgFetch(CONFIG.CREATE_ORDER_URL, {
         method: "POST",
@@ -488,8 +471,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         phone: phone,
         plan: plan,
         user: stored.user,
-        token: token,
-        isCreditPack: isCreditPack
+        token: token
       };
 
       let checkoutUrl =
@@ -499,12 +481,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         "&key=" + encodeURIComponent(CONFIG.RAZORPAY_KEY_ID) +
         "&user_id=" + encodeURIComponent(stored.user.id) +
         "&plan=" + encodeURIComponent(plan.id) +
-        "&phone=" + encodeURIComponent(phone);
-      if (isCreditPack) {
-        checkoutUrl += "&credits_to_add=" + encodeURIComponent(plan.credits);
-      } else {
-        checkoutUrl += "&duration_days=" + encodeURIComponent(plan.duration_days);
-      }
+        "&phone=" + encodeURIComponent(phone) +
+        "&duration_days=" + encodeURIComponent(plan.duration_days);
 
       // Open checkout inside the same popup using the dashboard iframe
       const dView = document.getElementById('dashboard-view');
@@ -542,8 +520,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           plan: context.plan.id,
           plan_type: context.plan.id,
           amount: context.plan.price,
-          duration_days: context.isCreditPack ? undefined : context.plan.duration_days,
-          credits_to_add: context.isCreditPack ? context.plan.credits : undefined,
+          duration_days: context.plan.duration_days,
           phone: context.phone,
         }),
       });
@@ -601,19 +578,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ════════════════════════════════════════════════════════════
-  //  PLAN BUTTON CLICKS (subscription + credit packs)
+  //  PLAN BUTTON CLICKS (subscription only)
   // ════════════════════════════════════════════════════════════
   document.querySelectorAll('.plan-card').forEach(btn => {
     btn.addEventListener('click', async () => {
       const planId = btn.dataset.plan;
-      const planType = btn.dataset.planType;
-      let plan;
-
-      if (planType === 'credits') {
-        plan = Object.values(CONFIG.CREDIT_PACKS || {}).find(p => p.id === planId);
-      } else {
-        plan = CONFIG.SUBSCRIPTION_PLANS?.[planId];
-      }
+      const plan = CONFIG.SUBSCRIPTION_PLANS?.[planId];
       if (!plan) return;
 
       const stored = await chrome.storage.local.get(['user']);
@@ -712,22 +682,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           appContainer.classList.remove('hidden');
 
           if (verified) {
-            if (ctx.isCreditPack) {
-              showMessage('Payment verified! Credits added.', 'success');
-            } else {
-              showMessage('Payment verified! Subscription activated.', 'success');
-            }
+            showMessage('Payment verified! Subscription activated.', 'success');
             // Refresh UI to show updated state
             setTimeout(() => checkLoginStatus(), 1000);
           } else {
-            if (ctx.isCreditPack) {
-              // For credit packs, just refresh UI — webhook will handle it
-              showMessage('Payment successful! Credits will update shortly.', 'success');
-              setTimeout(() => checkLoginStatus(), 3000);
-            } else {
-              // Fallback: poll for subscription in case webhook or checkout.html handled it
-              pollSubscriptionAfterPayment(ctx.user, ctx.token);
-            }
+            // Fallback: poll for subscription in case webhook or checkout.html handled it
+            pollSubscriptionAfterPayment(ctx.user, ctx.token);
           }
         } else {
           dashboardIframe.src = '';

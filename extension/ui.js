@@ -1,5 +1,5 @@
-// UI Components for Credits Extension v2.0.0
-// Growth-first model: Retention > Volume Usage > Conversion > High Pricing
+// UI Components for Extension v2.0.0
+// Subscription-only model
 const UI = {
 
     // Auth Modal HTML
@@ -30,7 +30,7 @@ const UI = {
 
                 <div class="signup-bonus">
                     <span class="bonus-icon">🎁</span>
-                    <span>Get <strong>${typeof CONFIG !== 'undefined' ? CONFIG.DEFAULT_SIGNUP_CREDITS : 15} FREE credits</strong> on signup + daily login bonus!</span>
+                    <span>Sign up and <strong>subscribe</strong> for unlimited AI tools access!</span>
                 </div>
 
                 <div style="text-align:center;margin-top:10px;">
@@ -42,12 +42,11 @@ const UI = {
 
     // Main Dashboard HTML
     getDashboardHTML: function (user, credits) {
-        const creditsNum = typeof credits === 'number' ? credits : 0;
-        const isLow = creditsNum <= (typeof CONFIG !== 'undefined' ? CONFIG.LOW_CREDITS_THRESHOLD : 5);
+        const hasSubscription = credits >= 999 || credits === Infinity || credits === '∞';
 
         return `
             <div class="modal-content dashboard-modal">
-                <!-- Compact Header with Credits Counter -->
+                <!-- Compact Header with Subscription Status -->
                 <div class="compact-header">
                     <div class="header-left">
                         <span class="logo-icon">🚀</span>
@@ -57,20 +56,20 @@ const UI = {
                         </div>
                     </div>
                     <div class="header-right">
-                        <div class="credits-badge ${isLow ? 'low-credits' : ''}">
-                            <span class="credits-label-sm">Credits Left:</span>
-                            <span class="credits-value" id="header-credits-count">${creditsNum}</span>
-                            <button class="btn-add-credits" id="buy-credits-btn" title="Buy more credits">+</button>
+                        <div class="credits-badge">
+                            <span class="credits-label-sm">${hasSubscription ? 'Pro Active' : 'No Plan'}</span>
+                            <span class="credits-value" id="header-credits-count">${hasSubscription ? '∞' : '—'}</span>
+                            <button class="btn-add-credits" id="buy-credits-btn" title="Subscribe">⚡</button>
                         </div>
                         <button class="close-btn" id="close-modal">×</button>
                     </div>
                 </div>
 
-                ${isLow ? `
-                <!-- Low Credits Warning Banner -->
+                ${!hasSubscription ? `
+                <!-- Subscribe Banner -->
                 <div class="low-credit-warning" id="low-credit-banner">
-                    <span>⚠️</span>
-                    <span>Running low. <button class="link-btn" id="upgrade-from-warning">Upgrade to continue</button> optimizing without interruption.</span>
+                    <span>⚡</span>
+                    <span>No active plan. <button class="link-btn" id="upgrade-from-warning">Subscribe now</button> for unlimited access.</span>
                 </div>
                 ` : ''}
 
@@ -115,7 +114,7 @@ const UI = {
                     <input type="file" id="image-input" accept="image/*" hidden>
                     <div class="upload-icon">📁</div>
                     <p class="upload-text">Click or drag image here</p>
-                    <p class="upload-hint">${typeof CONFIG !== 'undefined' ? CONFIG.POWERED_BY_LABEL : 'Powered by Ultra-Fast AI'} • ${typeof CONFIG !== 'undefined' ? CONFIG.CREDITS_PER_OPTIMIZATION : 1} credit per optimization</p>
+                    <p class="upload-hint">${typeof CONFIG !== 'undefined' ? CONFIG.POWERED_BY_LABEL : 'Powered by Ultra-Fast AI'} • Subscription required</p>
                 </div>
 
                 <!-- Preview -->
@@ -170,10 +169,9 @@ const UI = {
         `;
     },
 
-    // Buy Credits Modal — Hybrid: Subscription + Credit Packs
+    // Buy/Subscribe Modal — Subscription only
     getBuyCreditsHTML: function () {
         const subPlans = CONFIG.SUBSCRIPTION_PLANS || {};
-        const creditPacks = CONFIG.CREDIT_PACKS || {};
         const planOrder = ['trial', 'monthly', 'quarterly', 'half_yearly', 'yearly'];
 
         const subCards = planOrder.map(key => {
@@ -187,21 +185,6 @@ const UI = {
                     <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">${plan.duration_days} Days · All tools unlimited</div>
                     <div class="card-price-section" style="margin:0;">
                         <span style="font-size:20px;font-weight:800;color:#a78bfa;">₹${plan.price}</span>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        const creditCards = Object.values(creditPacks).map(pack => {
-            const isHighlight = Boolean(pack.badge);
-            return `
-                <div class="pricing-card-modern ${isHighlight ? 'featured' : ''}" style="padding:14px;margin-bottom:8px;cursor:pointer;" data-plan="${pack.id}" data-plan-type="credits">
-                    ${isHighlight ? `<div class="plan-badge badge-popular">${pack.badge}</div>` : ''}
-                    <h3 class="card-title" style="font-size:14px;margin:0 0 2px;">${pack.name}</h3>
-                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">${pack.credits} credits · No expiry</div>
-                    <div class="card-price-section" style="margin:0;">
-                        <span style="font-size:20px;font-weight:800;color:#10b981;">₹${pack.price}</span>
-                        <span style="font-size:10px;color:#10b981;margin-left:4px;">₹${(pack.price / pack.credits).toFixed(2)}/credit</span>
                     </div>
                 </div>
             `;
@@ -221,20 +204,11 @@ const UI = {
                         <div class="header-icon">💎</div>
                     </div>
                     <h2 class="buy-modal-title">Choose Your Plan</h2>
-                    <p class="buy-modal-subtitle">Subscribe for unlimited access, or buy credit packs</p>
-                </div>
-
-                <div style="display:flex;gap:4px;margin-bottom:12px;background:rgba(30,41,59,0.5);border-radius:8px;padding:3px;">
-                    <button class="buy-tab-btn active" data-tab="sub" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#7c3aed;color:#fff;font-family:inherit;">⚡ Subscription</button>
-                    <button class="buy-tab-btn" data-tab="credits" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:none;color:#94a3b8;font-family:inherit;">💳 Credit Packs</button>
+                    <p class="buy-modal-subtitle">Subscribe for unlimited access to all AI tools</p>
                 </div>
 
                 <div class="buy-tab-content" id="buy-tab-sub">
                     ${subCards}
-                </div>
-
-                <div class="buy-tab-content" id="buy-tab-credits" style="display:none;">
-                    ${creditCards}
                 </div>
 
                 <div class="payment-footer">
@@ -374,24 +348,6 @@ const UI = {
             ${milestone ? `<div class="opt-milestone">🎉 You're getting faster. AI has optimized ${totalOptimizations} listings for you!</div>` : ''}
         `;
         area.classList.remove('hidden');
-
-        // Update header credit counter
-        const headerCount = document.getElementById('header-credits-count');
-        if (headerCount) headerCount.innerHTML = creditsRemaining;
-
-        // Show low credit warning if needed
-        const threshold = typeof CONFIG !== 'undefined' ? CONFIG.LOW_CREDITS_THRESHOLD : 5;
-        const banner = document.getElementById('low-credit-banner');
-        if (creditsRemaining <= threshold && !banner) {
-            const header = document.querySelector('.compact-header');
-            if (header) {
-                const warn = document.createElement('div');
-                warn.className = 'low-credit-warning';
-                warn.id = 'low-credit-banner';
-                warn.innerHTML = `<span>⚠️</span><span>Running low. <button class="link-btn" id="upgrade-from-warning">Upgrade to continue</button> optimizing without interruption.</span>`;
-                header.insertAdjacentElement('afterend', warn);
-            }
-        }
     },
 
     // Render history items
@@ -451,12 +407,12 @@ const UI = {
 
     // Daily bonus welcome toast
     showDailyBonusToast: function (bonusAmount) {
-        this.showNotification(`🌅 Welcome back! +${bonusAmount} daily bonus credits added.`, 'success');
+        this.showNotification(`🌅 Welcome back! Bonus unlocked: ${bonusAmount}.`, 'success');
     },
 
     // First purchase reward toast
     showFirstPurchaseReward: function (bonusAmount) {
-        this.showNotification(`🎉 Thank you for trusting us! +${bonusAmount} bonus credits added.`, 'success');
+        this.showNotification(`🎉 Thank you for trusting us! Bonus unlocked: ${bonusAmount}.`, 'success');
     }
 };
 

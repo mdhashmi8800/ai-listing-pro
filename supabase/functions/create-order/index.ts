@@ -60,7 +60,6 @@ Deno.serve(async (req) => {
     if (body.user_id) notes.user_id = String(body.user_id);
     if (body.phone) notes.phone = String(body.phone);
     if (body.duration_days) notes.duration_days = String(body.duration_days);
-    if (body.credits_to_add) notes.credits_to_add = String(body.credits_to_add);
 
     try {
         const razorpayRes = await fetch("https://api.razorpay.com/v1/orders", {

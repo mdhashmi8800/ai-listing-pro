@@ -2,9 +2,9 @@
 CREATE TABLE IF NOT EXISTS public.payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    plan TEXT NOT NULL DEFAULT 'trial',
     amount DECIMAL NOT NULL,
     currency TEXT DEFAULT 'INR',
-    credits_added INTEGER NOT NULL,
     razorpay_order_id TEXT UNIQUE NOT NULL,
     razorpay_payment_id TEXT UNIQUE,
     razorpay_signature TEXT,
@@ -12,9 +12,8 @@ CREATE TABLE IF NOT EXISTS public.payments (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- Add first_purchase flag to profiles if not present to handle bonus logic
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_purchase BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.payments DROP COLUMN IF EXISTS credits_added;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS first_purchase;
 
 -- Row Level Security for payments table
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;

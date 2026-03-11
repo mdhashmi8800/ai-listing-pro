@@ -1,6 +1,6 @@
 // AI Listing Pro — Dashboard Logic
 // 3-Step Workflow: Upload → Generate → Apply to Meesho
-// Hybrid model: Subscription = unlimited tools, otherwise credit-based.
+// Subscription-only model: Users must subscribe to use tools.
 
 (async function () {
   'use strict';
@@ -13,23 +13,22 @@
   let currentListingImage = null;
   let lastGeneratedListing = null;
   let activePaymentPlanId = null;
-  let activePaymentTab = 'subscription'; // 'subscription' or 'credits'
+  let activePaymentTab = 'subscription'; // subscription only
   let currentPaymentContext = null;
   let paymentVerificationInFlight = false;
 
-  // ── Hybrid Access Check ──
+  // ── Subscription Access Check ──
   function hasActiveSubscription() {
     return activeSubscription && new Date(activeSubscription.end_date) > new Date();
   }
 
-  function canUseTool(creditCost = 1) {
-    if (hasActiveSubscription()) return true;
-    return (userProfile?.credits || 0) >= creditCost;
+  function canUseTool() {
+    return hasActiveSubscription();
   }
 
-  function getAccessLabel(creditCost = 1) {
+  function getAccessLabel() {
     if (hasActiveSubscription()) return 'Unlimited';
-    return `${creditCost} Credit`;
+    return 'Subscribe';
   }
 
   // ── DOM References ──
@@ -432,15 +431,14 @@
   function updateUI() {
     if (!userProfile || !currentUser) return;
 
-    const credits = userProfile.credits || 0;
     const name = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || 'User';
     const email = currentUser.email || '—';
     const initial = name.charAt(0).toUpperCase();
 
-    // Sidebar credits / subscription display
+    // Sidebar subscription display
     if (hasActiveSubscription()) {
       DOM.sidebarCreditsCount.textContent = '∞';
-      DOM.sidebarCredits.querySelector('.credits-label').textContent = `${activeSubscription.plan_name || 'Pro'} — ${formatSubscriptionExpiry(activeSubscription.end_date)}`;
+      DOM.sidebarCredits.querySelector('.credits-label').textContent = `${activeSubscription.plan_name || activeSubscription.plan || 'Pro'} — ${formatSubscriptionExpiry(activeSubscription.end_date)}`;
       DOM.sidebarCredits.classList.remove('low');
       DOM.sidebarCredits.classList.add('subscribed');
       // Update nav badges
@@ -450,29 +448,25 @@
       // Update button labels
       if (DOM.btnBuyCredits) DOM.btnBuyCredits.innerHTML = '⚡ Pro';
     } else {
-      DOM.sidebarCreditsCount.textContent = credits;
-      DOM.sidebarCredits.querySelector('.credits-label').textContent = 'Credits left';
+      DOM.sidebarCreditsCount.textContent = '—';
+      DOM.sidebarCredits.querySelector('.credits-label').textContent = 'No active plan';
       DOM.sidebarCredits.classList.remove('subscribed');
+      DOM.sidebarCredits.classList.remove('low');
       document.querySelectorAll('.nav-badge').forEach(b => {
-        if (b.textContent === '∞') b.textContent = '1 cr';
+        if (b.textContent === '∞') b.textContent = '—';
       });
-      if (DOM.btnBuyCredits) DOM.btnBuyCredits.innerHTML = '⚡ Credits';
-      if (credits <= 5) {
-        DOM.sidebarCredits.classList.add('low');
-      } else {
-        DOM.sidebarCredits.classList.remove('low');
-      }
+      if (DOM.btnBuyCredits) DOM.btnBuyCredits.innerHTML = '⚡ Subscribe';
     }
 
     DOM.sidebarName.textContent = name;
     DOM.sidebarEmail.textContent = email;
     DOM.sidebarAvatar.textContent = initial;
 
-    if (DOM.shipHeaderCreditsCount) DOM.shipHeaderCreditsCount.textContent = hasActiveSubscription() ? '∞' : credits;
+    if (DOM.shipHeaderCreditsCount) DOM.shipHeaderCreditsCount.textContent = hasActiveSubscription() ? '∞' : '—';
     if (DOM.shipUserName) DOM.shipUserName.textContent = name;
     if (DOM.shipUserAvatar) DOM.shipUserAvatar.textContent = initial;
     if (DOM.shipCreditsBadge) {
-      DOM.shipCreditsBadge.classList.toggle('low', !hasActiveSubscription() && credits <= 5);
+      DOM.shipCreditsBadge.classList.toggle('low', !hasActiveSubscription());
     }
 
     // Update generate button labels
@@ -490,8 +484,8 @@
   }
 
   function updateToolButtonLabels() {
-    const label = hasActiveSubscription() ? 'Unlimited' : '1 Credit';
-    const bulkLabel = hasActiveSubscription() ? 'Unlimited' : '1 Credit per product';
+    const label = hasActiveSubscription() ? 'Unlimited' : 'Subscribe';
+    const bulkLabel = hasActiveSubscription() ? 'Unlimited' : 'Subscribe';
     if (DOM.btnRunListing && !DOM.btnRunListing.disabled) {
       DOM.btnRunListing.innerHTML = `<span class="btn-icon">🧠</span> Generate Listing — ${label}`;
     }
@@ -557,14 +551,11 @@
   function renderPaymentPlans() {
     if (!DOM.paymentPlanList) return;
 
-    // Subscription plans
+    // Subscription plans only
     const subPlans = getSubscriptionPlans();
 
-    // Credit packs
-    const creditPacks = Object.values(CONFIG.CREDIT_PACKS || {});
-
     const subHtml = subPlans.map((plan) => {
-      const isActive = activePaymentTab === 'subscription' && plan.id === activePaymentPlanId;
+      const isActive = plan.id === activePaymentPlanId;
       const isHighlight = Boolean(plan.badge);
       return `<button class="payment-plan-card ${isActive ? 'active' : ''} ${isHighlight ? 'highlight' : ''}" type="button" data-payment-plan="${escapeHtml(plan.id)}" data-plan-type="subscription">
         <span class="payment-plan-copy">
@@ -579,74 +570,22 @@
       </button>`;
     }).join('');
 
-    const creditHtml = creditPacks.map((pack) => {
-      const isActive = activePaymentTab === 'credits' && pack.id === activePaymentPlanId;
-      return `<button class="payment-plan-card ${isActive ? 'active' : ''}" type="button" data-payment-plan="${escapeHtml(pack.id)}" data-plan-type="credits">
-        <span class="payment-plan-copy">
-          <strong>${escapeHtml(pack.name)}</strong>
-          <small>${escapeHtml(pack.tagline)}</small>
-        </span>
-        <span class="payment-plan-price">
-          ${pack.badge ? `<span class="payment-plan-badge">${escapeHtml(pack.badge)}</span>` : ''}
-          <strong>₹${escapeHtml(String(pack.price))}</strong>
-          <small>${pack.credits} credits · No expiry</small>
-        </span>
-      </button>`;
-    }).join('');
-
     DOM.paymentPlanList.innerHTML = `
-      <div class="payment-tab-toggle">
-        <button class="payment-tab-btn ${activePaymentTab === 'subscription' ? 'active' : ''}" data-tab="subscription">
-          ⚡ Subscription <small>Unlimited</small>
-        </button>
-        <button class="payment-tab-btn ${activePaymentTab === 'credits' ? 'active' : ''}" data-tab="credits">
-          💳 Credit Packs <small>Pay per use</small>
-        </button>
-      </div>
-
-      <div class="payment-tab-content" id="tab-subscription" style="display:${activePaymentTab === 'subscription' ? 'block' : 'none'}">
+      <div class="payment-tab-content" id="tab-subscription">
         <div class="payment-section-head">
           <span class="payment-section-title">🔓 Unlimited Access Plans</span>
           <span class="payment-section-note">All tools unlimited during plan period</span>
         </div>
         <div class="payment-plan-grid">${subHtml}</div>
       </div>
-
-      <div class="payment-tab-content" id="tab-credits" style="display:${activePaymentTab === 'credits' ? 'block' : 'none'}">
-        <div class="payment-section-head">
-          <span class="payment-section-title">💰 Credit Packs</span>
-          <span class="payment-section-note">Buy credits · Use anytime · No expiry</span>
-        </div>
-        <div class="payment-plan-grid">${creditHtml}</div>
-      </div>
     `;
-
-    // Tab toggle events
-    DOM.paymentPlanList.querySelectorAll('.payment-tab-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        activePaymentTab = btn.dataset.tab;
-        activePaymentPlanId = null;
-        renderPaymentPlans();
-      });
-    });
 
     // Subscription plan click events
     DOM.paymentPlanList.querySelectorAll('[data-plan-type="subscription"]').forEach((button) => {
       button.addEventListener('click', async () => {
         activePaymentPlanId = button.dataset.paymentPlan;
-        activePaymentTab = 'subscription';
         renderPaymentPlans();
         await startEmbeddedPayment(button.dataset.paymentPlan);
-      });
-    });
-
-    // Credit pack click events
-    DOM.paymentPlanList.querySelectorAll('[data-plan-type="credits"]').forEach((button) => {
-      button.addEventListener('click', async () => {
-        activePaymentPlanId = button.dataset.paymentPlan;
-        activePaymentTab = 'credits';
-        renderPaymentPlans();
-        await startCreditPackPayment(button.dataset.paymentPlan);
       });
     });
   }
@@ -764,82 +703,7 @@
     }
   }
 
-  async function startCreditPackPayment(packId) {
-    const pack = Object.values(CONFIG.CREDIT_PACKS || {}).find(p => p.id === packId);
-    if (!pack) return;
-
-    const phone = DOM.paymentPhoneInput?.value?.replace(/\D/g, '') || '';
-    if (phone.length !== 10) {
-      setPaymentStatus('Enter a valid 10-digit WhatsApp number before continuing.', 'error');
-      DOM.paymentPhoneInput?.focus();
-      return;
-    }
-
-    const token = await getAccessToken();
-    if (!token || !currentUser) {
-      setPaymentStatus('Session expired. Refresh and try again.', 'error');
-      return;
-    }
-
-    try {
-      setPaymentStatus(`Creating ${pack.name} order...`, 'info');
-
-      const response = await bgFetch(CONFIG.CREATE_ORDER_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: CONFIG.SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          amount: pack.price,
-          plan_id: pack.id,
-          user_id: currentUser.id,
-          phone,
-          credits_to_add: pack.credits,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const order = await response.json();
-
-      currentPaymentContext = {
-        orderId: order.id,
-        amount: order.amount,
-        phone,
-        plan: pack,
-        isCreditPack: true,
-        credits_to_add: pack.credits,
-        started: true,
-      };
-
-      try {
-        sessionStorage.setItem('paymentContext', JSON.stringify(currentPaymentContext));
-      } catch (_) {}
-
-      const checkoutUrl = CONFIG.CHECKOUT_URL
-        + '?order_id=' + encodeURIComponent(order.id)
-        + '&amount=' + encodeURIComponent(order.amount)
-        + '&key=' + encodeURIComponent(CONFIG.RAZORPAY_KEY_ID)
-        + '&phone=' + encodeURIComponent(phone)
-        + '&plan=' + encodeURIComponent(pack.id)
-        + '&user_id=' + encodeURIComponent(currentUser.id)
-        + '&credits_to_add=' + encodeURIComponent(pack.credits);
-
-      window.parent.postMessage({
-        type: 'OPEN_CHECKOUT',
-        url: checkoutUrl,
-      }, '*');
-
-      setPaymentStatus(`Redirecting to secure checkout...`, 'info');
-    } catch (error) {
-      console.error('[DASHBOARD_PAYMENT] credit pack error:', error);
-      setPaymentStatus(`Could not start checkout: ${error.message}`, 'error');
-    }
-  }
+  // startCreditPackPayment removed - subscription-only model
 
   async function verifyEmbeddedPayment(paymentData) {
     if (!currentPaymentContext || paymentVerificationInFlight || !currentUser) return;
@@ -865,8 +729,7 @@
           user_id: currentUser.id,
           plan_type: currentPaymentContext.plan.id,
           amount: currentPaymentContext.plan.price,
-          duration_days: currentPaymentContext.isCreditPack ? undefined : currentPaymentContext.plan.duration_days,
-          credits_to_add: currentPaymentContext.isCreditPack ? currentPaymentContext.credits_to_add : undefined,
+          duration_days: currentPaymentContext.plan.duration_days,
           phone: currentPaymentContext.phone,
         }),
       });
@@ -877,16 +740,11 @@
 
       const result = await response.json();
 
-      if (currentPaymentContext.isCreditPack) {
-        setPaymentStatus(`Payment verified! ${result.credits_added || currentPaymentContext.credits_to_add} credits added.`, 'success');
-        showToast(`${result.credits_added || currentPaymentContext.credits_to_add} credits added to your account!`, 'success');
-      } else {
-        const expiryText = result.end_date
-          ? ` Plan active till ${new Date(result.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`
-          : '';
-        setPaymentStatus(`Payment verified successfully!${expiryText}`, 'success');
-        showToast('Payment successful! Subscription activated.', 'success');
-      }
+      const expiryText = result.end_date
+        ? ` Plan active till ${new Date(result.end_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`
+        : '';
+      setPaymentStatus(`Payment verified successfully!${expiryText}`, 'success');
+      showToast('Payment successful! Subscription activated.', 'success');
       await initSession();
       currentPaymentContext = null;
       try { sessionStorage.removeItem('paymentContext'); } catch (_) {}
@@ -927,45 +785,18 @@
   }
 
   // ══════════════════════════════════════
-  //  CREDIT DEDUCTION (skipped for subscribers)
+  //  ACCESS CHECK (subscription-only)
   // ══════════════════════════════════════
   async function deductCredits(amount = 1) {
-    // Subscribers get unlimited access — no credit deduction
+    // Subscribers get unlimited access
     if (hasActiveSubscription()) {
       return true;
     }
 
-    const sbClient = window.supabaseClient;
-    if (!sbClient || !currentUser) return false;
-
-    const currentCredits = userProfile?.credits || 0;
-    if (currentCredits < amount) {
-      showToast('Not enough credits! Subscribe for unlimited access or buy more credits.', 'error');
-      openPaymentDrawer();
-      return false;
-    }
-
-    // Use the atomic deduct_credit RPC for safe deduction
-    const { data, error } = await sbClient.rpc('deduct_credit', { amount });
-
-    if (error) {
-      const msg = error.message || '';
-      if (msg.includes('insufficient_credits')) {
-        showToast('Not enough credits! Subscribe for unlimited or buy more.', 'error');
-        openPaymentDrawer();
-      } else if (msg.includes('account_banned')) {
-        showToast('Your account has been suspended.', 'error');
-      } else {
-        console.error('[DASHBOARD] Credit deduction error:', error);
-        showToast('Failed to deduct credits. Try again.', 'error');
-      }
-      return false;
-    }
-
-    // Update local state with the returned remaining credits
-    userProfile.credits = typeof data === 'number' ? data : currentCredits - amount;
-    updateUI();
-    return true;
+    // No subscription = no access
+    showToast('Please subscribe for unlimited access to all tools.', 'error');
+    openPaymentDrawer();
+    return false;
   }
 
   // ══════════════════════════════════════
@@ -1093,7 +924,7 @@
     const success = await deductCredits(1);
     if (!success) {
       DOM.btnRunListing.disabled = false;
-      DOM.btnRunListing.innerHTML = '<span class="btn-icon">🧠</span> Generate Listing — 1 Credit';
+      DOM.btnRunListing.innerHTML = '<span class="btn-icon">🧠</span> Generate Listing';
       return;
     }
 
@@ -1155,10 +986,10 @@
     // Wire up result action buttons
     setupResultActions(listing);
 
-    addHistoryEntry('AI Listing Generator', listing.title, '1 Credit');
+    addHistoryEntry('AI Listing Generator', listing.title, 'Included in subscription');
 
     DOM.btnRunListing.disabled = false;
-    DOM.btnRunListing.innerHTML = '<span class="btn-icon">🧠</span> Generate Listing — 1 Credit';
+    DOM.btnRunListing.innerHTML = '<span class="btn-icon">🧠</span> Generate Listing';
     showToast('Listing generated! Review and apply to Meesho.', 'success');
   });
 
@@ -1446,7 +1277,7 @@
     const success = await deductCredits(1);
     if (!success) {
       DOM.btnRunKeywords.disabled = false;
-      DOM.btnRunKeywords.innerHTML = '<span class="btn-icon">🔍</span> Generate Keywords — 1 Credit';
+      DOM.btnRunKeywords.innerHTML = '<span class="btn-icon">🔍</span> Generate Keywords';
       return;
     }
 
@@ -1484,11 +1315,11 @@
       });
     }
 
-    addHistoryEntry('Keyword Generator', product, '1 Credit');
+    addHistoryEntry('Keyword Generator', product, 'Included in subscription');
 
     DOM.btnRunKeywords.disabled = false;
-    DOM.btnRunKeywords.innerHTML = '<span class="btn-icon">🔍</span> Generate Keywords — 1 Credit';
-    showToast('Keywords generated! 1 credit used.', 'success');
+    DOM.btnRunKeywords.innerHTML = '<span class="btn-icon">🔍</span> Generate Keywords';
+    showToast('Keywords generated successfully.', 'success');
   });
 
   function generateKeywords(product, category, count) {
@@ -1956,19 +1787,15 @@
       return;
     }
 
-    const creditCost = products.length;
-    if ((userProfile?.credits || 0) < creditCost) {
-      showToast(`Need ${creditCost} credits for ${products.length} products. You have ${userProfile?.credits || 0}.`, 'error');
-      return;
-    }
+    const batchSize = products.length;
 
     DOM.btnRunBulk.disabled = true;
     DOM.btnRunBulk.innerHTML = `<span class="btn-icon">⏳</span> Generating ${products.length} listings...`;
 
-    const success = await deductCredits(creditCost);
+    const success = await deductCredits(batchSize);
     if (!success) {
       DOM.btnRunBulk.disabled = false;
-      DOM.btnRunBulk.innerHTML = '<span class="btn-icon">⚡</span> Generate Bulk Listings — 1 Credit per product';
+      DOM.btnRunBulk.innerHTML = '<span class="btn-icon">⚡</span> Generate Bulk Listings';
       return;
     }
 
@@ -1978,7 +1805,7 @@
 <div class="result-section-card">
   <div class="result-metric-row"><span>Products Processed</span><strong>${products.length}</strong></div>
   <div class="result-metric-row"><span>Output Focus</span><strong>${escapeHtml(focus.charAt(0).toUpperCase() + focus.slice(1))}</strong></div>
-  <div class="result-metric-row"><span>Credits Used</span><strong>${creditCost}</strong></div>
+  <div class="result-metric-row"><span>Access</span><strong>Included in subscription</strong></div>
 </div>`;
 
     const bulkListings = [];
@@ -2056,11 +1883,11 @@
       });
     });
 
-    addHistoryEntry('Bulk Listing Generator', `${products.length} products`, `${creditCost} Credits`);
+    addHistoryEntry('Bulk Listing Generator', `${products.length} products`, 'Included in subscription');
 
     DOM.btnRunBulk.disabled = false;
-    DOM.btnRunBulk.innerHTML = '<span class="btn-icon">⚡</span> Generate Bulk Listings — 1 Credit per product';
-    showToast(`Bulk generation complete! ${creditCost} credits used.`, 'success');
+    DOM.btnRunBulk.innerHTML = '<span class="btn-icon">⚡</span> Generate Bulk Listings';
+    showToast(`Bulk generation complete for ${products.length} products.`, 'success');
   });
 
   // ══════════════════════════════════════

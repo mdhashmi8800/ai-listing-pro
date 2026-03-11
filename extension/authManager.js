@@ -833,34 +833,10 @@ const CreditsManager = {
         return { success: true, credits: 999 };
     },
 
-    // Set unlimited subscription (proxy through background)
-    setUnlimited: async function (days = 30) {
-        const user = AuthManager.getUser();
-        if (!user) return { success: false, error: 'Not logged in' };
-
-        const unlimitedUntil = new Date();
-        unlimitedUntil.setDate(unlimitedUntil.getDate() + days);
-
-        const res = await this._bgMessage({
-            action: 'PROXY_FETCH',
-            url: `${CONFIG.SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`,
-            options: {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': CONFIG.SUPABASE_ANON_KEY,
-                    'Prefer': 'return=representation'
-                },
-                body: JSON.stringify({ unlimited_until: unlimitedUntil.toISOString() })
-            }
-        });
-
-        if (res?.success && res?.ok) {
-            user.unlimitedUntil = unlimitedUntil.toISOString();
-            await chrome.storage.local.set({ user });
-            return { success: true, unlimitedUntil: user.unlimitedUntil };
-        }
-        return { success: false, error: 'Failed to set unlimited' };
+    // setUnlimited — REMOVED (security fix: was exploitable via DevTools)
+    setUnlimited: async function (_days) {
+        console.warn('⚠️ setUnlimited is disabled. Subscriptions are managed server-side only.');
+        return { success: false, error: 'Not available. Subscriptions are managed server-side.' };
     },
 
     applyPromoCode: async function (_code) {

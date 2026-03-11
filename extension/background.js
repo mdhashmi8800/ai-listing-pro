@@ -784,20 +784,8 @@ class BackgroundService {
 }
 
 // ── Keep Service Worker Alive ──────────────────────────────────
-chrome.runtime.onInstalled.addListener(() => {
-    console.log("Extension Installed");
-});
-
 chrome.runtime.onStartup.addListener(() => {
     console.log("Extension Started");
-});
-
-// keep service worker alive when messages come
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.action === "PING") {
-        sendResponse({ ok: true });
-        return true;
-    }
 });
 
 // ── Restore session from supabaseSession on extension load ──

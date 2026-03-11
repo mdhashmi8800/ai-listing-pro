@@ -32,19 +32,7 @@ interface Plan {
   badgeColor: string;
 }
 
-interface CreditPack {
-  id: string;
-  name: string;
-  price: string;
-  amount: number;
-  credits: number;
-  perCredit: string;
-  description: string;
-  features: string[];
-  cta: string;
-  badge: string | null;
-  badgeColor: string;
-}
+
 
 const plans: Plan[] = [
   {
@@ -150,45 +138,7 @@ const plans: Plan[] = [
   },
 ];
 
-const creditPacks: CreditPack[] = [
-  {
-    id: "credit_starter",
-    name: "Starter Pack",
-    price: "₹79",
-    amount: 79,
-    credits: 50,
-    perCredit: "₹1.58/credit",
-    description: "Great for beginners — try AI tools without a subscription.",
-    features: [
-      "50 credits",
-      "One-time payment",
-      "No expiry — use anytime",
-      "All AI tools accessible",
-    ],
-    cta: "Buy 50 Credits",
-    badge: null,
-    badgeColor: "",
-  },
-  {
-    id: "credit_growth",
-    name: "Growth Pack",
-    price: "₹149",
-    amount: 149,
-    credits: 200,
-    perCredit: "₹0.75/credit",
-    description: "Best value per credit — ideal for regular sellers.",
-    features: [
-      "200 credits",
-      "One-time payment",
-      "No expiry — use anytime",
-      "All AI tools accessible",
-      "Save 53% per credit",
-    ],
-    cta: "Buy 200 Credits",
-    badge: "BEST VALUE",
-    badgeColor: "from-blue-500 to-cyan-400",
-  },
-];
+
 
 export default function Pricing() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -315,92 +265,7 @@ export default function Pricing() {
     }
   };
 
-  const startCreditPayment = async (pack: CreditPack, uid?: string) => {
-    const currentUserId = uid || userId;
-    if (!currentUserId) {
-      // Reuse login flow with a synthetic plan object
-      handleLogin({ ...pack, duration_days: 0, period: "", highlighted: false } as Plan);
-      return;
-    }
 
-    try {
-      setPayingPlan(pack.id);
-
-      const res = await fetch("/api/create-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: pack.amount,
-          plan_id: pack.id,
-          user_id: currentUserId,
-          credits_to_add: pack.credits,
-        }),
-      });
-
-      const order = await res.json();
-
-      if (!order.id) {
-        alert(order.error || "Failed to create order");
-        return;
-      }
-
-      const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: order.amount,
-        currency: "INR",
-        name: "AI Listing Pro",
-        description: `${pack.credits} Credits`,
-        order_id: order.id,
-        notes: {
-          user_id: currentUserId,
-          plan: pack.id,
-          credits_to_add: String(pack.credits),
-        },
-        handler: async function (response: {
-          razorpay_payment_id: string;
-          razorpay_order_id: string;
-          razorpay_signature: string;
-        }) {
-          try {
-            const verifyRes = await fetch("/api/verify-payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                user_id: currentUserId,
-                plan: pack.id,
-                credits_to_add: pack.credits,
-                amount: pack.amount,
-              }),
-            });
-            const result = await verifyRes.json();
-            if (result.success) {
-              alert(`Payment Successful! ${result.credits_added || pack.credits} credits added.`);
-              window.location.reload();
-            } else {
-              alert("Payment verification failed. Please contact support.");
-            }
-          } catch {
-            alert("Payment verification failed. Please contact support.");
-          }
-        },
-        modal: {
-          ondismiss: () => setPayingPlan(null),
-        },
-        theme: { color: "#3b82f6" },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } catch (err) {
-      console.error("Credit payment error:", err);
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setPayingPlan(null);
-    }
-  };
 
   return (
     <section id="pricing" className="py-20 md:py-28 bg-surface">
@@ -414,7 +279,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h2>
           <p className="mt-4 text-muted text-lg">
-            Subscribe for unlimited access, or buy credit packs to pay per use.
+            Subscribe for unlimited access to all AI tools.
             No hidden fees. UPI payment via Razorpay.
           </p>
         </div>
@@ -491,68 +356,9 @@ export default function Pricing() {
           ))}
         </div>
 
-        {/* ── CREDIT PACKS SECTION ── */}
-        <div className="mt-20 max-w-3xl mx-auto">
-          <div className="text-center mb-8">
-            <h3 className="text-xl font-bold text-foreground mb-1">💳 Credit Packs</h3>
-            <p className="text-muted text-sm">Don&apos;t want a subscription? Buy credits instead — no expiry, pay per use.</p>
-          </div>
 
-          <div className="grid sm:grid-cols-2 gap-6">
-            {creditPacks.map((pack, i) => (
-              <div
-                key={i}
-                className={`relative rounded-2xl p-7 border transition-all duration-300 hover:-translate-y-1 ${
-                  pack.badge
-                    ? "bg-surface-2 border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/10"
-                    : "bg-surface-2 border-border hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/10"
-                }`}
-              >
-                {pack.badge && (
-                  <div
-                    className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r ${pack.badgeColor} text-white text-xs font-bold rounded-full whitespace-nowrap`}
-                  >
-                    {pack.badge}
-                  </div>
-                )}
-                <h3 className="text-lg font-bold mb-1 text-foreground">{pack.name}</h3>
-                <p className="text-muted text-xs mb-3">{pack.description}</p>
-                <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-3xl font-extrabold text-foreground">{pack.price}</span>
-                  <span className="text-muted text-xs uppercase">one-time</span>
-                </div>
-                <p className="text-xs text-blue-400 mb-5">{pack.perCredit}</p>
-                <ul className="space-y-2.5 mb-6">
-                  {pack.features.map((f, j) => (
-                    <li key={j} className="flex items-start gap-2 text-sm text-muted">
-                      <svg
-                        className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => startCreditPayment(pack)}
-                  disabled={payingPlan === pack.id}
-                  className="w-full py-3 rounded-full font-semibold text-sm transition-all cursor-pointer bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/25"
-                >
-                  {payingPlan === pack.id ? "Processing..." : pack.cta}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+
+
 
         {/* UPI badge */}
         <div className="text-center mt-12 flex items-center justify-center gap-2 text-muted text-sm">

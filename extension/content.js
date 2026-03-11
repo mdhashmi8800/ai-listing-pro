@@ -428,7 +428,7 @@ class MeeshoCreditsOptimizer {
                 <span class="optimizer-btn-icon">🚀</span>
                 <div class="optimizer-btn-text">
                     <span class="optimizer-btn-title">AI Shipping Optimizer</span>
-                    <span class="optimizer-btn-subtitle">Credit-based system</span>
+                    <span class="optimizer-btn-subtitle">Subscription-based</span>
                 </div>
             </div>
         `;
@@ -456,10 +456,6 @@ class MeeshoCreditsOptimizer {
             style.textContent = `
                 @keyframes aiOptFadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes aiOptSlideUp { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
-                @keyframes aiOptSpin { to { transform: rotate(360deg); } }
-                @keyframes aiOptPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-                @keyframes aiOptBarGrow { from { width: 0%; } to { width: 100%; } }
-                @keyframes aiOptResultFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
                 #ai-optimizer-overlay {
                     position: fixed; inset: 0; z-index: 999999;
                     background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(6px);
@@ -479,40 +475,12 @@ class MeeshoCreditsOptimizer {
                 }
                 .aiopt-header h2 { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
                 .aiopt-header p { font-size: 12px; opacity: .85; margin: 0; }
-                .aiopt-body { padding: 24px 28px 20px; min-height: 180px; }
-                .aiopt-spinner-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; }
-                .aiopt-spinner {
-                    width: 48px; height: 48px; border: 4px solid #E2E8F0;
-                    border-top-color: #2563EB; border-radius: 50%;
-                    animation: aiOptSpin .8s linear infinite;
-                }
-                .aiopt-status { font-size: 15px; font-weight: 600; color: #0F172A; animation: aiOptPulse 1.5s ease infinite; }
-                .aiopt-progress-bar {
-                    width: 100%; height: 6px; background: #E2E8F0; border-radius: 3px;
-                    overflow: hidden; margin-top: 4px;
-                }
-                .aiopt-progress-fill { height: 100%; background: linear-gradient(90deg, #2563EB, #7C3AED); border-radius: 3px; animation: aiOptBarGrow 2s ease forwards; }
-                .aiopt-results { animation: aiOptResultFade .5s ease; }
-                .aiopt-results h3 { font-size: 16px; font-weight: 700; color: #0F172A; margin: 0 0 16px; text-align: center; }
-                .aiopt-result-row {
-                    display: flex; justify-content: space-between; align-items: center;
-                    padding: 12px 16px; background: #F8FAFC; border-radius: 10px;
-                    margin-bottom: 8px; border: 1px solid #E2E8F0;
-                }
-                .aiopt-result-label { font-size: 13px; color: #64748B; font-weight: 500; }
-                .aiopt-result-value { font-size: 14px; font-weight: 700; color: #0F172A; }
-                .aiopt-result-value.savings { color: #10B981; }
-                .aiopt-result-value.original { color: #EF4444; text-decoration: line-through; opacity: .7; }
-                .aiopt-result-value.optimized { color: #2563EB; font-size: 18px; }
-                .aiopt-result-highlight {
-                    background: linear-gradient(135deg, #ECFDF5, #F0FDF4);
-                    border: 1.5px solid #10B981; padding: 14px 18px;
-                    border-radius: 10px; text-align: center; margin-top: 12px;
-                }
-                .aiopt-result-highlight .big-save { font-size: 28px; font-weight: 800; color: #10B981; }
-                .aiopt-result-highlight .save-label { font-size: 12px; color: #065F46; margin-top: 2px; }
+                .aiopt-body { padding: 24px 28px 20px; min-height: 120px; text-align: center; }
+                .aiopt-body .coming-soon-icon { font-size: 48px; margin-bottom: 12px; }
+                .aiopt-body h3 { font-size: 18px; font-weight: 700; color: #0F172A; margin: 0 0 8px; }
+                .aiopt-body p { font-size: 13px; color: #64748B; margin: 0 0 16px; line-height: 1.5; }
                 .aiopt-close-btn {
-                    display: block; width: 100%; padding: 12px; margin-top: 16px;
+                    display: block; width: 100%; padding: 12px; margin-top: 8px;
                     background: #2563EB; color: #fff; border: none; border-radius: 10px;
                     font-size: 14px; font-weight: 600; cursor: pointer;
                     font-family: inherit; transition: background .15s;
@@ -531,19 +499,26 @@ class MeeshoCreditsOptimizer {
         // Create modal
         const modal = document.createElement('div');
         modal.id = 'ai-optimizer-modal';
+
+        // Show current detected shipping if available
+        const shippingInfo = this.currentShippingCost
+            ? `<p>We detected your current shipping cost: <strong>₹${this.currentShippingCost}</strong></p>`
+            : '';
+
         modal.innerHTML = `
             <div class="aiopt-header">
                 <h2>🚀 AI Shipping Optimizer</h2>
-                <p>Powered by Advanced Machine Learning</p>
+                <p>Smart Shipping Cost Analysis</p>
             </div>
             <div class="aiopt-body">
-                <div class="aiopt-spinner-wrap">
-                    <div class="aiopt-spinner"></div>
-                    <div class="aiopt-status">Analyzing shipping data...</div>
-                    <div class="aiopt-progress-bar"><div class="aiopt-progress-fill"></div></div>
-                </div>
+                <div class="coming-soon-icon">🔧</div>
+                <h3>Coming Soon</h3>
+                ${shippingInfo}
+                <p>We're building a real AI-powered shipping optimizer that will analyze your product weight, dimensions, and delivery zones to suggest the best shipping options.</p>
+                <p style="font-size: 12px; color: #94A3B8;">Stay tuned — this feature is under active development.</p>
+                <button class="aiopt-close-btn" id="aiopt-close-btn">Got it</button>
             </div>
-            <div class="aiopt-footer"><span>Analyzing product weight, dimensions & delivery zones</span></div>
+            <div class="aiopt-footer"><span>AI Listing Pro</span></div>
         `;
 
         overlay.appendChild(modal);
@@ -554,54 +529,8 @@ class MeeshoCreditsOptimizer {
             if (e.target === overlay) this._closeOptimizerOverlay();
         });
 
-        // Phase 2: Show results after 2 seconds
-        setTimeout(() => {
-            const body = modal.querySelector('.aiopt-body');
-            const footer = modal.querySelector('.aiopt-footer');
-
-            // Generate realistic fake data
-            const currentCost = this.currentShippingCost || Math.floor(Math.random() * 40) + 35;
-            const savingsPercent = Math.floor(Math.random() * 18) + 12; // 12-30%
-            const optimizedCost = Math.round(currentCost * (1 - savingsPercent / 100));
-            const savedAmount = currentCost - optimizedCost;
-            const zone = ['North India', 'South India', 'West India', 'East India', 'Metro Cities'][Math.floor(Math.random() * 5)];
-            const weight = (Math.random() * 1.5 + 0.2).toFixed(1);
-
-            body.innerHTML = `
-                <div class="aiopt-results">
-                    <h3>✅ Optimization Complete</h3>
-                    <div class="aiopt-result-row">
-                        <span class="aiopt-result-label">Delivery Zone</span>
-                        <span class="aiopt-result-value">${zone}</span>
-                    </div>
-                    <div class="aiopt-result-row">
-                        <span class="aiopt-result-label">Est. Weight</span>
-                        <span class="aiopt-result-value">${weight} kg</span>
-                    </div>
-                    <div class="aiopt-result-row">
-                        <span class="aiopt-result-label">Current Shipping</span>
-                        <span class="aiopt-result-value original">₹${currentCost}</span>
-                    </div>
-                    <div class="aiopt-result-row">
-                        <span class="aiopt-result-label">Optimized Cost</span>
-                        <span class="aiopt-result-value optimized">₹${optimizedCost}</span>
-                    </div>
-                    <div class="aiopt-result-highlight">
-                        <div class="big-save">₹${savedAmount} saved</div>
-                        <div class="save-label">${savingsPercent}% reduction in shipping cost</div>
-                    </div>
-                    <button class="aiopt-close-btn" id="aiopt-close-btn">Done</button>
-                </div>
-            `;
-
-            footer.innerHTML = '<span>Results based on AI analysis of 10,000+ shipping data points</span>';
-
-            const closeBtn = document.getElementById('aiopt-close-btn');
-            if (closeBtn) closeBtn.addEventListener('click', () => this._closeOptimizerOverlay());
-
-            // Auto-close after 5 more seconds (7s total)
-            setTimeout(() => this._closeOptimizerOverlay(), 5000);
-        }, 2000);
+        const closeBtn = modal.querySelector('#aiopt-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', () => this._closeOptimizerOverlay());
     }
 
     _closeOptimizerOverlay() {
@@ -812,11 +741,11 @@ class MeeshoCreditsOptimizer {
                 return;
             }
 
-            // Get live credits from background
+            // Get subscription status from background
             const creditsRes = await this._bgSend({ action: 'GET_CREDITS' });
-            const credits = creditsRes?.credits ?? 0;
+            const credits = creditsRes?.hasSubscription ? 999 : 0;
 
-            console.log('✅ User logged in:', user.email, 'Credits:', credits);
+            console.log('✅ User logged in:', user.email, 'Subscribed:', !!creditsRes?.hasSubscription);
 
             this.modal.innerHTML = UI.getDashboardHTML(user, credits);
             document.body.appendChild(this.modal);
@@ -913,7 +842,7 @@ class MeeshoCreditsOptimizer {
             };
         }
 
-        // Buy credits
+        // Subscribe
         const buyBtn = document.getElementById('buy-credits-btn');
         if (buyBtn) {
             buyBtn.onclick = () => this.showBuyCreditsModal();
@@ -1027,25 +956,20 @@ class MeeshoCreditsOptimizer {
 
     async refreshCreditsDisplay() {
         const creditsRes = await this._bgSend({ action: 'GET_CREDITS' });
-        const credits = creditsRes?.credits ?? 0;
+        const hasSubscription = creditsRes?.hasSubscription ?? false;
         const creditsValue = document.querySelector('.credits-badge .credits-value');
         const creditsBadge = document.querySelector('.credits-badge');
         const headerCount = document.getElementById('header-credits-count');
 
         if (creditsValue) {
-            creditsValue.innerHTML = credits + ' Credits';
-            creditsBadge?.classList.remove('unlimited');
+            creditsValue.innerHTML = hasSubscription ? 'Subscribed ✅' : 'No Plan';
+            if (hasSubscription) {
+                creditsBadge?.classList.add('unlimited');
+            } else {
+                creditsBadge?.classList.remove('unlimited');
+            }
         }
-        // Also update header counter
-        if (headerCount) headerCount.innerHTML = credits;
-
-        // Show low credits warning if needed
-        const threshold = typeof CONFIG !== 'undefined' ? CONFIG.LOW_CREDITS_THRESHOLD : 5;
-        if (credits <= threshold) {
-            creditsBadge?.classList.add('low-credits');
-        } else {
-            creditsBadge?.classList.remove('low-credits');
-        }
+        if (headerCount) headerCount.innerHTML = hasSubscription ? '∞' : '0';
     }
 
     async loadAnnouncements() {
@@ -1285,14 +1209,14 @@ class MeeshoCreditsOptimizer {
     async processImage(file) {
         console.log('📤 Processing image:', file.name, file.size, 'bytes');
 
-        // Check credits first via background
+        // Check subscription access first via background
         const creditsCheck = await this._bgSend({ action: 'GET_CREDITS' });
         if (!creditsCheck?.success || (creditsCheck.credits ?? 0) < 1) {
-            UI.showNotification('❌ Insufficient credits! Buy more to continue.', 'error');
+            UI.showNotification('❌ No active subscription. Subscribe to continue.', 'error');
             this.showBuyCreditsModal();
             return;
         }
-        console.log('✅ Credits available');
+        console.log('✅ Subscription access available');
 
         // Check category
         const categoryId = document.getElementById('category-select')?.value;
@@ -1377,7 +1301,7 @@ class MeeshoCreditsOptimizer {
             if (result.success && result.results.length > 0) {
                 console.log(`✅ Found ${result.results.length} results`);
 
-                // Deduct 1 credit on successful optimization (not on error/failure)
+                // Confirm access after a successful optimization run.
                 const creditResult = await this._bgSend({ action: 'DEDUCT_CREDITS', amount: 1 });
                 if (creditResult?.success) {
                     console.log('✅ Credit deducted. Remaining:', creditResult.remaining);
@@ -1400,7 +1324,7 @@ class MeeshoCreditsOptimizer {
                     if (totalOpts % 10 === 0) {
                         UI.showNotification(`🎉 You're getting faster. AI has optimized ${totalOpts} listings for you!`, 'success');
                     } else {
-                        UI.showNotification(`⚡ Optimized in under 1 second · Credits left: ${creditResult.remaining}`, 'success');
+                        UI.showNotification('⚡ Optimized in under 1 second · Included in your subscription', 'success');
                     }
                 }
 
